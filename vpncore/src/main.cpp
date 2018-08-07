@@ -70,21 +70,6 @@ using tcp = boost::asio::ip::tcp;
 using udp = boost::asio::ip::udp;
 
 
-tcp::endpoint make_addr_ipv4(uint32_t ip, uint16_t port)
-{
-	return tcp::endpoint(boost::asio::ip::make_address_v4(ip), port);
-}
-
-void* memory_dup(const void* mem, size_t size)
-{
-	void* out = malloc(size);
-
-	if (out != NULL)
-		memcpy(out, mem, size);
-
-	return out;
-}
-
 int platform_init()
 {
 #if defined(WIN32) || defined(_WIN32)
@@ -1319,6 +1304,8 @@ private:
 
 int main(int argc, char** argv)
 {
+	platform_init();
+
 	io_context io;
 
 	dev_config cfg = { "10.0.0.1", "255.255.255.0", "10.0.0.0" };
