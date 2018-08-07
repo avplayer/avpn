@@ -714,6 +714,8 @@ void tap_window_device::close()
 {
 	if (m_io_handle.is_open())
 	{
+		tap_win32_set_status(m_tap_context->handle_, FALSE);
+
 		boost::system::error_code ignore_ec;
 		m_io_handle.close(ignore_ec);
 	}
