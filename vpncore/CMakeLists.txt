@@ -13,5 +13,4 @@ file(GLOB vpncore_SRCS
 
 add_executable(avpn
 	${vpncore_SRCS}
-	#${ODB_GENERATED}
 )
