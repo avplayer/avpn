@@ -5,7 +5,11 @@
 
 #include "boost/asio.hpp"
 
+#if BOOST_ASIO_WINDOWS
 #include "tuntap_windows_service.hpp"
+#endif
+
+
 #include "basic_tuntap.hpp"
 
 namespace tuntap_service {
