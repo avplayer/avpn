@@ -43,7 +43,7 @@ namespace po = boost::program_options;
 #include <boost/config.hpp>
 
 
-#include "tap_windows.hpp"
+#include "tuntap_windows.hpp"
 #include "socks_client.hpp"
 
 #include "lwip/init.h"
@@ -617,7 +617,7 @@ private:
 class tun2socks
 {
 public:
-	tun2socks(boost::asio::io_context& io, tap_window_device& dev, std::string dns = "")
+	tun2socks(boost::asio::io_context& io, tuntap_window_device& dev, std::string dns = "")
 		: m_io_context(io)
 		, m_strand(io)
 		, m_timer(io)
@@ -1224,7 +1224,7 @@ private:
 	boost::asio::steady_timer m_timer;
 	buffer_queue m_buffer_queue;
 	boost::asio::streambuf m_buffer;
-	tap_window_device& m_dev;
+	tuntap_window_device& m_dev;
 	struct netif m_netif;
 	std::string m_dns_server;
 	boost::local_shared_ptr<socks::socks_client> m_udp_socks;
@@ -1264,7 +1264,7 @@ int main(int argc, char** argv)
 	if (argc >= 2)
 		cfg.dev_name_ = argv[1];
 
-	tap_window_device tap(io);
+	tuntap_window_device tap(io);
 	auto dev_list = tap.fetch_tap_device_list();
 	std::string guid;
 	for (auto& i : dev_list)
@@ -1284,9 +1284,7 @@ int main(int argc, char** argv)
 		return -1;
 	}
 
-	//
-
-
+	// 创建tun2socks对象.
 	tun2socks ts(io, tap);
 
 	// 启动tun2socks.
@@ -1298,19 +1296,3 @@ int main(int argc, char** argv)
 	return 0;
 }
 
-/*
-
-netsh interface ip set interface WLAN ignoredefaultroutes = enabled
-route add 103.59.42.111 192.168.125.1 metric 1
-route add 114.114.114.114 192.168.125.1 metric 1
-route add 223.6.6.6 192.168.125.1 metric 1
-route add 0.0.0.0 mask 0.0.0.0 10.0.0.2 metric 5
-
-windows上如果没有默认路由，则会导致ping不可用，getaddrinfo 等api不可用.
-恢复执行
-
-netsh interface ip set interface WLAN ignoredefaultroutes = disabled
-route delete 0.0.0.0 mask 0.0.0.0 10.0.0.2 metric 6
-route delete 0.0.0.0 mask 0.0.0.0 10.0.0.1 metric 6
-
-*/

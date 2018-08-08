@@ -30,15 +30,15 @@ struct dev_config
 
 struct tap_context;
 
-class tap_window_device
+class tuntap_window_device
 {
 	// c++11 noncopyable.
-	tap_window_device(const tap_window_device&) = delete;
-	tap_window_device& operator=(const tap_window_device&) = delete;
+	tuntap_window_device(const tuntap_window_device&) = delete;
+	tuntap_window_device& operator=(const tuntap_window_device&) = delete;
 
 public:
-	tap_window_device(boost::asio::io_context& io);
-	~tap_window_device();
+	tuntap_window_device(boost::asio::io_context& io);
+	~tuntap_window_device();
 
 public:
 	bool open(const dev_config& cfg);

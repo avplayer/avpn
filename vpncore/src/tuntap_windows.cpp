@@ -27,7 +27,7 @@
 #include "boost/smart_ptr/local_shared_ptr.hpp"
 #include "boost/smart_ptr/make_local_shared.hpp"
 
-#include "tap_windows.hpp"
+#include "tuntap_windows.hpp"
 
 #define USERMODEDEVICEDIR				TEXT("\\\\.\\Global\\")
 #define TAPSUFFIX						TEXT(".tap")
@@ -382,7 +382,7 @@ struct tap_context
 
 
 
-tap_window_device::tap_window_device(boost::asio::io_context& io)
+tuntap_window_device::tuntap_window_device(boost::asio::io_context& io)
 	: m_io_context(io)
 	, m_io_handle(io)
 {
@@ -544,12 +544,12 @@ tap_window_device::tap_window_device(boost::asio::io_context& io)
 	}
 }
 
-tap_window_device::~tap_window_device()
+tuntap_window_device::~tuntap_window_device()
 {
 	close();
 }
 
-bool tap_window_device::open(const dev_config& cfg)
+bool tuntap_window_device::open(const dev_config& cfg)
 {
 	int index;
 	index = get_interface_index(cfg.guid_.c_str());
@@ -710,7 +710,7 @@ bool tap_window_device::open(const dev_config& cfg)
 	return true;
 }
 
-void tap_window_device::close()
+void tuntap_window_device::close()
 {
 	if (m_io_handle.is_open())
 	{
@@ -728,12 +728,12 @@ void tap_window_device::close()
 	}
 }
 
-const std::vector<tap_device>& tap_window_device::fetch_tap_device_list()
+const std::vector<tap_device>& tuntap_window_device::fetch_tap_device_list()
 {
 	return m_device_list;
 }
 
-bool tap_window_device::fetch_mac(char mac[6])
+bool tuntap_window_device::fetch_mac(char mac[6])
 {
 	if (m_tap_context)
 	{
@@ -744,7 +744,7 @@ bool tap_window_device::fetch_mac(char mac[6])
 	return false;
 }
 
-int tap_window_device::fetch_mtu()
+int tuntap_window_device::fetch_mtu()
 {
 	return m_tap_context->mtu_;
 }
