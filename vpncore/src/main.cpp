@@ -119,31 +119,10 @@ int platform_init()
 }
 
 
-static
-void bin_to_strhex(unsigned char *bin, size_t binsz, char **result)
-{
-	char hex_str[] = "0123456789abcdef";
-	unsigned int  i;
-
-	*result = (char *)malloc(binsz * 2 + 1);
-	(*result)[binsz * 2] = 0;
-
-	if (!binsz)
-		return;
-
-	for (i = 0; i < binsz; i++)
-	{
-		(*result)[i * 2 + 0] = hex_str[(bin[i] >> 4) & 0x0F];
-		(*result)[i * 2 + 1] = hex_str[(bin[i]) & 0x0F];
-	}
-}
-
-
-typedef std::deque<struct pbuf*> buffer_queue;
-
 // app -> tap -> lwip -> socks
 // socks -> lwip -> tap -> app
 
+using buffer_queue = std::deque<struct pbuf*>;
 
 std::atomic_int client_count = 0;
 
@@ -1152,9 +1131,9 @@ private:
 		{
 		case 4:
 		{
-			// udp header size = 20, Protocol = 0x11
+			// udp header size = 28, Protocol = 0x11
 			// https://en.wikipedia.org/wiki/List_of_IP_protocol_numbers
-			if (data_len < 20 || data[9] != 0x11)
+			if (data_len < 28 || data[9] != 0x11)
 				return false;
 
 			// https://en.wikipedia.org/wiki/IPv4
