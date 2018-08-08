@@ -121,8 +121,9 @@ else ()
 endif(TEST_BIG_ENDIAN)
 
 
-set(Boost_USE_STATIC_LIBS	ON)
+set(Boost_USE_STATIC_LIBS		ON)
 set(Boost_USE_STATIC_RUNTIME	ON)
+add_definitions(-DBOOST_ALL_NO_LIB)
 
 find_package(Threads)
 
@@ -140,21 +141,16 @@ endif()
 set(BOOST_INCLUDE_DIRS ${CMAKE_CURRENT_SOURCE_DIR}/third_party/boost)
 set(LWIP_INCLUDE_DIRS ${CMAKE_CURRENT_SOURCE_DIR}/third_party/lwip/src/include)
 
-#	set(ZLIB_INCLUDE_DIRS ${CMAKE_CURRENT_SOURCE_DIR}/third_party/zlib)
-#	set(OPENSSL_INCLUDE_DIRS ${CMAKE_CURRENT_SOURCE_DIR}/third_party/openssl/include)
-
 add_definitions(-DBOOST_COROUTINES_NO_DEPRECATION_WARNING)
 add_subdirectory(third_party/boost)
-add_subdirectory(third_party/lwip)
+include_directories(${BOOST_INCLUDE_DIRS})
 
-#	add_subdirectory(third_party/zlib EXCLUDE_FROM_ALL)
-#	add_subdirectory(third_party/openssl)
+add_subdirectory(third_party/lwip)
+add_subdirectory(vpncore)
 
 include_directories(
-	${BOOST_INCLUDE_DIRS}
 	${LWIP_INCLUDE_DIRS}
-#	${ZLIB_INCLUDE_DIRS}
-#	${OPENSSL_INCLUDE_DIRS}
+	${VPNCORE_INCLUDE_DIRS}
 )
 
 if (WIN32)
@@ -165,8 +161,7 @@ endif()
 
 link_libraries(
 	${LWIP_LIBRARIES}
-#	${ZLIB_LIBRARIES}
-#	${OPENSSL_LIBRARIES}
+	${VPNCORE_LIBRARIES}
 	Boost::system Boost::thread Boost::program_options Boost::locale Boost::random Boost::coroutine
 )
 
@@ -179,5 +174,5 @@ if (WIN32)
 	set(CMAKE_RUNTIME_OUTPUT_DIRECTORY_RELEASE ${CMAKE_BINARY_DIR}/bin/release)
 endif()
 
-add_subdirectory(vpncore)
+add_subdirectory(avpn)
 

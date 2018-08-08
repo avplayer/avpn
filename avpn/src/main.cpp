@@ -42,10 +42,6 @@ namespace po = boost::program_options;
 #include <boost/asio/strand.hpp>
 #include <boost/config.hpp>
 
-
-#include "tuntap_windows.hpp"
-#include "socks_client.hpp"
-
 #include "lwip/init.h"
 #include "lwip/snmp.h"
 #include "lwip/inet_chksum.h"
@@ -62,6 +58,11 @@ namespace po = boost::program_options;
 
 #include "lwip/tcp.h"
 #include "lwip/ip_addr.h"
+
+#include "vpncore/socks_client.hpp"
+#include "vpncore/tuntap.hpp"
+
+using namespace tuntap_service;
 
 using namespace boost::asio;
 namespace win = boost::asio::windows;
@@ -243,7 +244,7 @@ public:
 			m_socks_client = boost::make_local_shared<
 				socks::socks_client>(boost::ref(m_socks));
 			m_socks_client->async_do_proxy(socks_addr,
-			[this, self, local] (const boost::system::error_code& err)
+				[this, self, local](const boost::system::error_code& err)
 			{
 				if (err)
 				{
@@ -424,7 +425,7 @@ protected:
 	}
 
 	friend static
-	void client_err_func(void *arg, err_t err)
+		void client_err_func(void *arg, err_t err)
 	{
 		auto splicer = (vpn_splice*)arg;
 		splicer->client_err(err);
@@ -441,14 +442,14 @@ protected:
 	}
 
 	friend static
-	err_t client_recv_func(void *arg, struct tcp_pcb *tpcb, struct pbuf *p, err_t err)
+		err_t client_recv_func(void *arg, struct tcp_pcb *tpcb, struct pbuf *p, err_t err)
 	{
 		auto splicer = (vpn_splice*)arg;
 		return splicer->client_recv(tpcb, p, err);
 	}
 
 	friend static
-	err_t client_sent_func(void *arg, struct tcp_pcb *tpcb, u16_t len)
+		err_t client_sent_func(void *arg, struct tcp_pcb *tpcb, u16_t len)
 	{
 		auto splicer = (vpn_splice*)arg;
 		return splicer->client_sent(tpcb, len);
@@ -478,11 +479,11 @@ protected:
 			printf("splice: 0x%08x, lwip closed, snd queue: %zd\n",
 				client_index(), m_snd_queue.size());
 
-// 			if (m_socks.is_open())
-// 			{
-// 				boost::system::error_code ec;
-// 				m_socks.shutdown(socket_base::shutdown_both, ec);
-// 			}
+			// 			if (m_socks.is_open())
+			// 			{
+			// 				boost::system::error_code ec;
+			// 				m_socks.shutdown(socket_base::shutdown_both, ec);
+			// 			}
 			return ERR_OK;
 		}
 
@@ -539,8 +540,8 @@ protected:
 			boost::asio::async_write(m_socks,
 				boost::asio::buffer(p->payload, p->len),
 				boost::asio::transfer_exactly(p->len),
-					boost::bind(&vpn_splice::handle_write,
-						shared_from_this(), boost::asio::placeholders::error));
+				boost::bind(&vpn_splice::handle_write,
+					shared_from_this(), boost::asio::placeholders::error));
 		}
 	}
 
@@ -586,8 +587,8 @@ protected:
 			boost::asio::async_write(m_socks,
 				boost::asio::buffer(p->payload, p->len),
 				boost::asio::transfer_exactly(p->len),
-					boost::bind(&vpn_splice::handle_write,
-						shared_from_this(), boost::asio::placeholders::error));
+				boost::bind(&vpn_splice::handle_write,
+					shared_from_this(), boost::asio::placeholders::error));
 		}
 	}
 
@@ -617,7 +618,7 @@ private:
 class tun2socks
 {
 public:
-	tun2socks(boost::asio::io_context& io, tuntap_window_device& dev, std::string dns = "")
+	tun2socks(boost::asio::io_context& io, tuntap& dev, std::string dns = "")
 		: m_io_context(io)
 		, m_strand(io)
 		, m_timer(io)
@@ -700,7 +701,7 @@ public:
 
 private:
 	static
-	err_t netif_init_func(struct netif *netif)
+		err_t netif_init_func(struct netif *netif)
 	{
 		std::cout << "netif func init\n";
 
@@ -713,14 +714,14 @@ private:
 	}
 
 	friend static
-	err_t netif_output_func(struct netif *netif, struct pbuf *p, const ip4_addr_t *ipaddr)
+		err_t netif_output_func(struct netif *netif, struct pbuf *p, const ip4_addr_t *ipaddr)
 	{
 		auto pthis = (tun2socks*)netif->state;
 		return pthis->common_netif_output(netif, p);
 	}
 
 	friend static
-	err_t netif_output_ip6_func(struct netif *netif, struct pbuf *p, const ip6_addr_t *ipaddr)
+		err_t netif_output_ip6_func(struct netif *netif, struct pbuf *p, const ip6_addr_t *ipaddr)
 	{
 		auto pthis = (tun2socks*)netif->state;
 		return pthis->common_netif_output(netif, p);
@@ -736,7 +737,7 @@ private:
 	}
 
 	static
-	err_t netif_input_func(struct pbuf *p, struct netif *inp)
+		err_t netif_input_func(struct pbuf *p, struct netif *inp)
 	{
 		uint8_t ip_version = 0;
 		if (p->len > 0)
@@ -761,7 +762,7 @@ private:
 	}
 
 	friend static
-	err_t listener_accept_func(void *arg, struct tcp_pcb *newpcb, err_t err)
+		err_t listener_accept_func(void *arg, struct tcp_pcb *newpcb, err_t err)
 	{
 		auto pthis = (tun2socks*)arg;
 		return pthis->listener_accept(arg, newpcb, err);
@@ -853,7 +854,7 @@ private:
 			socks_addr.udp_associate = true;
 
 			m_udp_socks->async_do_proxy(socks_addr,
-			[this](const boost::system::error_code& err)
+				[this](const boost::system::error_code& err)
 			{
 				if (err)
 				{
@@ -894,7 +895,7 @@ private:
 	{
 		static char tmp[32];
 		boost::asio::async_read(m_socket_socks, boost::asio::buffer(tmp, 32),
-		[this] (const boost::system::error_code& error, std::size_t)
+			[this](const boost::system::error_code& error, std::size_t)
 		{
 			if (error)
 			{
@@ -944,7 +945,7 @@ private:
 			uint32_t src_addr = src.address().to_v4().to_ulong();
 			*((uint32_t*)(p + 12)) = htonl(src_addr); // source
 
-			// 是dns.
+													  // 是dns.
 			bool dns_found = false;
 			udp::endpoint local_endp;
 			if (src.port() == 53)
@@ -979,14 +980,14 @@ private:
 
 			*((uint16_t*)(p + 10)) = inet_chksum(p, 20);// htons(sum); // ip header checksum
 
-			// udp header.
+														// udp header.
 			p = p + 20;
 			*((uint16_t*)(p + 0)) = htons(src.port()); // source port
 			*((uint16_t*)(p + 2)) = htons(local_endp.port()); // dest port
 			*((uint16_t*)(p + 4)) = htons(data.size() + 8); // udp len
 			*((uint16_t*)(p + 6)) = 0x00; // udp checksum
 
-			// udp body.
+										  // udp body.
 			p = p + 8;
 			std::memcpy(p, data.data(), data.size());
 
@@ -998,7 +999,7 @@ private:
 			src_addr_t.addr = htonl(src_addr);
 			dst_addr_t.addr = htonl(local_endp.address().to_v4().to_ulong());
 
-			struct pbuf chk = * pb;
+			struct pbuf chk = *pb;
 			chk.payload = (uint8_t*)pb->payload + 20;
 			chk.tot_len = pb->tot_len - 20;
 			chk.len = pb->len - 20;
@@ -1023,7 +1024,7 @@ private:
 	{
 		// 启动调度定时器.
 		m_timer.expires_from_now(std::chrono::milliseconds(250));
-		m_timer.async_wait([this, count] (const boost::system::error_code& ec) mutable
+		m_timer.async_wait([this, count](const boost::system::error_code& ec) mutable
 		{
 			if (ec)
 				return;
@@ -1065,7 +1066,7 @@ private:
 	void do_read()
 	{
 		m_dev.async_read_some(m_buffer.prepare(1024 * 64),
-		[this] (const boost::system::error_code& error, std::size_t bytes_transferred) mutable
+			[this](const boost::system::error_code& error, std::size_t bytes_transferred) mutable
 		{
 			if (error)
 			{
@@ -1077,8 +1078,8 @@ private:
 				m_buffer.commit(bytes_transferred);
 
 				auto consumer = [this](std::size_t* len) mutable { m_buffer.consume(*len); };
- 				typedef std::unique_ptr<std::size_t, decltype(consumer)> buffer_consume;
- 				buffer_consume buffer_consumer(&bytes_transferred, consumer);
+				typedef std::unique_ptr<std::size_t, decltype(consumer)> buffer_consume;
+				buffer_consume buffer_consumer(&bytes_transferred, consumer);
 
 				auto tmp = boost::asio::buffer_cast<const void*>(m_buffer.data());
 				auto data_len = bytes_transferred;
@@ -1138,8 +1139,8 @@ private:
 
 			// https://en.wikipedia.org/wiki/IPv4
 			auto p = data + 12; // source address.
-			// uint32_t src = ntohl(*(uint32_t*)p);
-			// uint32_t dst = ntohl(*(uint32_t*)(p + 4));
+								// uint32_t src = ntohl(*(uint32_t*)p);
+								// uint32_t dst = ntohl(*(uint32_t*)(p + 4));
 
 			auto src_addr = boost::asio::ip::address_v4(ntohl(*(uint32_t*)p));
 			auto dst_addr = boost::asio::ip::address_v4(ntohl(*(uint32_t*)(p + 4)));
@@ -1196,15 +1197,15 @@ private:
 			m_udp_socket.async_send_to(boost::asio::buffer(*bufptr),
 				m_udp_socks->udp_endpoint(), [this, bufptr]
 				(const boost::system::error_code& error, std::size_t bytes_transferred)
+			{
+				if (error)
 				{
-					if (error)
-					{
-						std::cout << "udp async_send_to error: " << error.message() << std::endl;
-						return;
-					}
+					std::cout << "udp async_send_to error: " << error.message() << std::endl;
+					return;
+				}
 
-					// nothing to do in here.
-				});
+				// nothing to do in here.
+			});
 
 			return true;
 		}
@@ -1224,7 +1225,7 @@ private:
 	boost::asio::steady_timer m_timer;
 	buffer_queue m_buffer_queue;
 	boost::asio::streambuf m_buffer;
-	tuntap_window_device& m_dev;
+	tuntap& m_dev;
 	struct netif m_netif;
 	std::string m_dns_server;
 	boost::local_shared_ptr<socks::socks_client> m_udp_socks;
@@ -1264,8 +1265,8 @@ int main(int argc, char** argv)
 	if (argc >= 2)
 		cfg.dev_name_ = argv[1];
 
-	tuntap_window_device tap(io);
-	auto dev_list = tap.fetch_tap_device_list();
+	tuntap tap(io);
+	auto dev_list = tap.take_device_list();
 	std::string guid;
 	for (auto& i : dev_list)
 	{
@@ -1295,4 +1296,3 @@ int main(int argc, char** argv)
 
 	return 0;
 }
-
