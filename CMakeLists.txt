@@ -12,7 +12,7 @@ if (WIN32)
 	include(FindZip)
 	message(STATUS ${ZIP_EXECUTABLE})
 
-	add_definitions(-DAVPN_USE_WINAPI)
+	add_definitions(-DAVPN_USE_WINAPI -DAVPN_WINDOWS)
 elseif(CMAKE_SYSTEM_NAME STREQUAL "Linux")
 	add_definitions(-DAVPN_LINUX)
 elseif (CMAKE_SYSTEM_NAME MATCHES "FreeBSD")
