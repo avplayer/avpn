@@ -245,7 +245,9 @@ namespace tuntap_service {
 			::close(sock);
 
 			// 复制mac地址.
-			memcpy(m_mac_addr.data(), ifr.ifr_hwaddr.sa_data, 6);
+			m_mac_addr.resize(6);
+			if (ifr.ifr_hwaddr.sa_data)
+				memcpy(m_mac_addr.data(), ifr.ifr_hwaddr.sa_data, 6);
 
 			// 设置fd为非阻塞.
 			if (fcntl(fd, F_SETFL, O_NONBLOCK) < 0)
@@ -483,7 +485,7 @@ namespace tuntap_service {
 				return;
 			if (rtnl_wilddump_request(&rth, AF_UNSPEC, RTM_GETLINK) < 0)
 				return;
-			if (rtnl_dump_filter(&rth, list_tuntap_func, NULL) < 0)
+			if (rtnl_dump_filter(&rth, list_tuntap_func, (void*)this) < 0)
 				return;
 			rtnl_close(&rth);
 #endif
