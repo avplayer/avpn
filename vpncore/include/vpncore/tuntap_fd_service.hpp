@@ -247,7 +247,9 @@ namespace tuntap_service {
 			// 复制mac地址.
 			m_mac_addr.resize(6);
 			if (ifr.ifr_hwaddr.sa_data)
+			{
 				memcpy(m_mac_addr.data(), ifr.ifr_hwaddr.sa_data, 6);
+			}
 
 			// 设置fd为非阻塞.
 			if (fcntl(fd, F_SETFL, O_NONBLOCK) < 0)
@@ -550,7 +552,7 @@ namespace tuntap_service {
 				dev.name_ = name;
 				dev.dev_type_ = dev_tun;
 				m_device_list.push_back(dev);
-				printf("iframe: %s, type: %d\n", name, flags);
+				printf("iframe: %s, tun type: %d\n", name, flags);
 			}
 
 			if (flags & IFF_TAP)
@@ -559,7 +561,7 @@ namespace tuntap_service {
 				dev.name_ = name;
 				dev.dev_type_ = dev_tap;
 				m_device_list.push_back(dev);
-				printf("iframe: %s, type: %d\n", name, flags);
+				printf("iframe: %s, tap type: %d\n", name, flags);
 			}
 #endif
 			return 0;
