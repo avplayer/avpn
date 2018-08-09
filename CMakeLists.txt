@@ -155,8 +155,8 @@ include_directories(
 
 if (WIN32)
 	link_libraries(Secur32.lib)
-else()
-	link_libraries(systemd)
+elseif(UNIX AND NOT APPLE)
+	link_libraries(systemd mnl netlink)
 endif()
 
 link_libraries(
