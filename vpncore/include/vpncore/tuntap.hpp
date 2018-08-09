@@ -5,8 +5,10 @@
 
 #include "boost/asio.hpp"
 
-#if BOOST_ASIO_WINDOWS
+#ifdef AVPN_WINDOWS
 #include "tuntap_windows_service.hpp"
+#else
+#include "tuntap_fd_service.hpp"
 #endif
 
 
@@ -15,10 +17,10 @@
 namespace tuntap_service {
 
 	// 定义tuntap实现.
-#if BOOST_ASIO_WINDOWS
+#ifdef AVPN_WINDOWS
 	typedef basic_tuntap<tuntap_windows_service> tuntap;
 #else
-	typedef basic_tuntap<tuntap_fd_serivce> tuntap;
+	typedef basic_tuntap<tuntap_fd_service> tuntap;
 #endif
 
 }
