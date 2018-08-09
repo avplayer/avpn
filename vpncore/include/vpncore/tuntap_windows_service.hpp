@@ -320,7 +320,7 @@ namespace tuntap_service {
 		{
 			BOOST_ASSERT("impl == this" && impl == this);
 			close(impl);
-			delete impl;
+			// delete impl;
 			impl = null();
 		}
 
@@ -361,7 +361,7 @@ namespace tuntap_service {
 			}
 
 			// usage of numeric constants is ugly, but this is really tied to this version of the driver
-			if (cfg.dev_type_ == dev_config::dev_tun
+			if (cfg.dev_type_ == tuntap_service::dev_tun
 				&& version.major == 9 && version.minor < 8)
 			{
 				std::cout << "WARNING:  Tap-Win32 driver version " << version.major << "." << version.minor
@@ -369,14 +369,14 @@ namespace tuntap_service {
 			}
 
 			// tap driver 9.8 (2.2.0 and 2.2.1 release) is buggy
-			if (cfg.dev_type_ == dev_config::dev_tun
+			if (cfg.dev_type_ == tuntap_service::dev_tun
 				&& version.major == 9 && version.minor == 8)
 			{
 				std::cout << "ERROR:  Tap-Win32 driver version " << version.major << "." << version.minor
 					<< " is buggy regarding small IPv4 packets in TUN mode. Upgrade your Tap-Win32 driver.\n";
 			}
 
-			if (cfg.dev_type_ == dev_config::dev_tun)
+			if (cfg.dev_type_ == tuntap_service::dev_tun)
 			{
 				uint32_t tun_addrs[3];
 
