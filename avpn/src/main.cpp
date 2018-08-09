@@ -65,7 +65,10 @@ namespace po = boost::program_options;
 using namespace tuntap_service;
 
 using namespace boost::asio;
+
+#ifdef AVPN_WINDOWS
 namespace win = boost::asio::windows;
+#endif
 
 using tcp = boost::asio::ip::tcp;
 using udp = boost::asio::ip::udp;
@@ -125,7 +128,7 @@ int platform_init()
 
 using buffer_queue = std::deque<struct pbuf*>;
 
-std::atomic_int client_count = 0;
+std::atomic_int client_count(0);
 
 bool connect_socks(boost::asio::yield_context yield, boost::asio::ip::tcp::socket& sock,
 	const std::string& socks_uri, socks::socks_address& socks_addr)
@@ -424,8 +427,8 @@ protected:
 		}
 	}
 
-	friend static
-		void client_err_func(void *arg, err_t err)
+	// friend
+	static void client_err_func(void *arg, err_t err)
 	{
 		auto splicer = (vpn_splice*)arg;
 		splicer->client_err(err);
@@ -441,15 +444,15 @@ protected:
 			tcp_recv(m_pcb, NULL);
 	}
 
-	friend static
-		err_t client_recv_func(void *arg, struct tcp_pcb *tpcb, struct pbuf *p, err_t err)
+	// friend
+	static err_t client_recv_func(void *arg, struct tcp_pcb *tpcb, struct pbuf *p, err_t err)
 	{
 		auto splicer = (vpn_splice*)arg;
 		return splicer->client_recv(tpcb, p, err);
 	}
 
-	friend static
-		err_t client_sent_func(void *arg, struct tcp_pcb *tpcb, u16_t len)
+	// friend
+	static err_t client_sent_func(void *arg, struct tcp_pcb *tpcb, u16_t len)
 	{
 		auto splicer = (vpn_splice*)arg;
 		return splicer->client_sent(tpcb, len);
@@ -713,15 +716,15 @@ private:
 		return ERR_OK;
 	}
 
-	friend static
-		err_t netif_output_func(struct netif *netif, struct pbuf *p, const ip4_addr_t *ipaddr)
+	// friend
+	static err_t netif_output_func(struct netif *netif, struct pbuf *p, const ip4_addr_t *ipaddr)
 	{
 		auto pthis = (tun2socks*)netif->state;
 		return pthis->common_netif_output(netif, p);
 	}
 
-	friend static
-		err_t netif_output_ip6_func(struct netif *netif, struct pbuf *p, const ip6_addr_t *ipaddr)
+	// friend
+	static err_t netif_output_ip6_func(struct netif *netif, struct pbuf *p, const ip6_addr_t *ipaddr)
 	{
 		auto pthis = (tun2socks*)netif->state;
 		return pthis->common_netif_output(netif, p);
@@ -761,8 +764,8 @@ private:
 		return ERR_OK;
 	}
 
-	friend static
-		err_t listener_accept_func(void *arg, struct tcp_pcb *newpcb, err_t err)
+	// friend
+	static err_t listener_accept_func(void *arg, struct tcp_pcb *newpcb, err_t err)
 	{
 		auto pthis = (tun2socks*)arg;
 		return pthis->listener_accept(arg, newpcb, err);

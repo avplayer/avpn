@@ -26,15 +26,17 @@
 #endif
 
 #ifdef AVPN_LINUX
+extern "C" {
 #include <linux/if_tun.h>
 
 #include <asm/types.h>
 #include <libnetlink.h>
 #include <linux/netlink.h>
 #include <linux/rtnetlink.h>
+}
 
-#define ARPHRD_NONE			0xFFFE
-#define ARPHRD_ETHER        1
+// #define ARPHRD_NONE			0xFFFE
+// #define ARPHRD_ETHER        1
 
 #ifndef IFF_TUN
 #define IFF_TUN             0x0001
@@ -75,7 +77,7 @@ namespace tuntap_service {
 
 	namespace details {
 
-		inline int read_tuntap_prop(const char *dev, char *prop, long *value)
+		inline int read_tuntap_prop(const char *dev, const char *prop, long *value)
 		{
 			char fname[128], buf[80], *endp, *nl;
 			FILE *fp;
@@ -188,7 +190,7 @@ namespace tuntap_service {
 
 			if (!cfg.tun_fd_)
 			{
-				fd = open(TUNDEV, O_RDWR);
+				fd = ::open(TUNDEV, O_RDWR);
 				if (cfg.tun_fd_ < 0)
 					return false;
 			}
@@ -207,25 +209,25 @@ namespace tuntap_service {
 
 			if (ioctl(fd, TUNSETIFF, (void *)&ifr) < 0) //打开虚拟网卡
 			{
-				close(fd);
+				::close(fd);
 				return false;
 			}
 
 			printf("TUN / TAP device %s opened", ifr.ifr_name);
-			cfg.dev_name_ = ifr.ifr_name;
+			// cfg.dev_name_ = ifr.ifr_name;
 
 			// open dummy socket for ioctls
 			int sock = socket(AF_INET, SOCK_DGRAM, 0);
 			if (sock < 0)
 			{
-				close(fd);
+				::close(fd);
 				return false;
 			}
 
 			if (ioctl(sock, SIOCGIFMTU, (void *)&ifr) < 0)
 			{
-				close(sock);
-				close(fd);
+				::close(sock);
+				::close(fd);
 				return false;
 			}
 
@@ -236,11 +238,11 @@ namespace tuntap_service {
 
 			if (ioctl(sock, SIOCGIFHWADDR, (void *)&ifr) < 0)
 			{
-				close(sock);
-				close(fd);
+				::close(sock);
+				::close(fd);
 				return false;
 			}
-			close(sock);
+			::close(sock);
 
 			// 复制mac地址.
 			memcpy(m_mac_addr.data(), ifr.ifr_hwaddr.sa_data, 6);
@@ -248,7 +250,7 @@ namespace tuntap_service {
 			// 设置fd为非阻塞.
 			if (fcntl(fd, F_SETFL, O_NONBLOCK) < 0)
 			{
-				close(fd);
+				::close(fd);
 				return false;
 			}
 
@@ -263,7 +265,7 @@ namespace tuntap_service {
 #ifdef AVPN_LINUX
 			if (m_tuntap_fd != 0)
 			{
-				close(m_tuntap_fd);
+				::close(m_tuntap_fd);
 				m_tuntap_fd = 0;
 			}
 #endif
@@ -488,11 +490,12 @@ namespace tuntap_service {
 		}
 
 #ifdef AVPN_LINUX
-		friend static int list_tuntap_func(const struct sockaddr_nl *who,
+		// friend 
+		static int list_tuntap_func(const struct sockaddr_nl *who,
 			struct nlmsghdr *n, void *arg)
 		{
 			auto pthis = (tuntap_fd_service*)arg;
-			return pthis->list_tuntap_func(who, n);
+			return pthis->list_tuntap(who, n);
 		}
 #endif
 
@@ -500,7 +503,7 @@ namespace tuntap_service {
 			struct nlmsghdr *n)
 		{
 #ifdef AVPN_LINUX
-			struct ifinfomsg *ifi = NLMSG_DATA(n);
+			struct ifinfomsg *ifi = (struct ifinfomsg*)NLMSG_DATA(n);
 			struct rtattr *tb[IFLA_MAX + 1];
 			struct rtattr *linkinfo[IFLA_INFO_MAX + 1];
 			const char *name, *kind;
@@ -526,7 +529,8 @@ namespace tuntap_service {
 			if (!tb[IFLA_LINKINFO])
 				return 0;
 
-			parse_rtattr_nested(linkinfo, IFLA_INFO_MAX, tb[IFLA_LINKINFO]);
+			parse_rtattr(linkinfo, IFLA_INFO_MAX, (struct rtattr *)RTA_DATA(tb[IFLA_LINKINFO]), RTA_PAYLOAD(tb[IFLA_LINKINFO]));
+			// parse_rtattr_nested(linkinfo, IFLA_INFO_MAX, (void*)tb[IFLA_LINKINFO]);
 			if (!linkinfo[IFLA_INFO_KIND])
 				return 0;
 
@@ -535,16 +539,16 @@ namespace tuntap_service {
 				return 0;
 
 			name = rta_getattr_str(tb[IFLA_IFNAME]);
-			if (read_tuntap_prop(name, "tun_flags", &flags))
+			if (details::read_tuntap_prop(name, "tun_flags", &flags))
 				return 0;
 
-			printf("iframe: %s, type: %d\n", name);
 			if (flags & IFF_TUN)
 			{
 				device_tuntap dev;
 				dev.name_ = name;
 				dev.dev_type_ = dev_tun;
 				m_device_list.push_back(dev);
+				printf("iframe: %s, type: %d\n", name, flags);
 			}
 
 			if (flags & IFF_TAP)
@@ -553,6 +557,7 @@ namespace tuntap_service {
 				dev.name_ = name;
 				dev.dev_type_ = dev_tap;
 				m_device_list.push_back(dev);
+				printf("iframe: %s, type: %d\n", name, flags);
 			}
 #endif
 			return 0;
