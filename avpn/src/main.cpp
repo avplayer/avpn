@@ -1279,7 +1279,8 @@ int main(int argc, char** argv)
 
 	streambuf read_buf;
 
-	cfg.dev_type_ = dev_config::dev_tun;
+	cfg.dev_type_ = tuntap_service::dev_tun;
+	// cfg.tun_fd_ = _fileno(stdin);
 	if (!tap.open(cfg))
 	{
 		return -1;
