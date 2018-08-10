@@ -554,7 +554,8 @@ namespace tuntap_service {
 			if (!tb[IFLA_LINKINFO])
 				return 0;
 
-			parse_rtattr(linkinfo, IFLA_INFO_MAX, (struct rtattr *)RTA_DATA(tb[IFLA_LINKINFO]), RTA_PAYLOAD(tb[IFLA_LINKINFO]));
+			parse_rtattr(linkinfo, IFLA_INFO_MAX, (struct rtattr *)
+				RTA_DATA(tb[IFLA_LINKINFO]), RTA_PAYLOAD(tb[IFLA_LINKINFO]));
 			// parse_rtattr_nested(linkinfo, IFLA_INFO_MAX, (void*)tb[IFLA_LINKINFO]);
 			if (!linkinfo[IFLA_INFO_KIND])
 				return 0;
