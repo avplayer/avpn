@@ -1282,10 +1282,13 @@ int main(int argc, char** argv)
 
 	streambuf read_buf;
 
+	cfg.dev_name_ = "";
+	cfg.guid_ = "";
 	cfg.dev_type_ = tuntap_service::dev_tun;
-	// cfg.tun_fd_ = _fileno(stdin);
+	cfg.tun_fd_ = -1;
 	if (!tap.open(cfg))
 	{
+		printf("open tun device fail!\n");
 		return -1;
 	}
 

@@ -183,15 +183,14 @@ namespace tuntap_service {
 
 		bool open(impl_type& impl, const dev_config& cfg)
 		{
-			m_tuntap_fd = cfg.tun_fd_;
 #ifdef AVPN_LINUX
 			struct ifreq ifr;
 			int fd;
 
-			if (!cfg.tun_fd_)
+			if (cfg.tun_fd_ < 0)
 			{
 				fd = ::open(TUNDEV, O_RDWR);
-				if (cfg.tun_fd_ < 0)
+				if (fd < 0)
 					return false;
 			}
 
@@ -213,7 +212,7 @@ namespace tuntap_service {
 				return false;
 			}
 
-			printf("TUN / TAP device %s opened", ifr.ifr_name);
+			printf("TUN / TAP device %s opened\n", ifr.ifr_name);
 			// cfg.dev_name_ = ifr.ifr_name;
 
 			// open dummy socket for ioctls
@@ -242,6 +241,25 @@ namespace tuntap_service {
 				::close(fd);
 				return false;
 			}
+			ifr.ifr_flags |= IFF_UP;
+			if (ioctl(sock, SIOCSIFFLAGS, (void *)&ifr) < 0)
+			{
+				::close(sock);
+				::close(fd);
+				return false;
+			}
+
+			auto addr = boost::asio::ip::address_v4::from_string(cfg.local_);
+			boost::asio::ip::udp::endpoint endp;
+			endp.address(addr);
+			memcpy(&ifr.ifr_addr, endp.data(), sizeof(struct sockaddr));
+			if (ioctl(sock, SIOCSIFADDR, (void *)&ifr) < 0)
+			{
+				::close(sock);
+				::close(fd);
+				return false;
+			}
+
 			::close(sock);
 
 			// 复制mac地址.
@@ -252,13 +270,15 @@ namespace tuntap_service {
 			}
 
 			// 设置fd为非阻塞.
-			if (fcntl(fd, F_SETFL, O_NONBLOCK) < 0)
-			{
-				::close(fd);
-				return false;
-			}
+//			if (fcntl(fd, F_SETFL, O_NONBLOCK) < 0)
+//			{
+//				::close(fd);
+//				return false;
+//			}
 
 			m_tuntap_fd = fd;
+			printf("TUN / TAP device %s successd, %d\n", ifr.ifr_name, fd);
+
 #endif
 			return true;
 		}
