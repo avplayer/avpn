@@ -694,7 +694,8 @@ public:
 		tcp_accept(listener, listener_accept_func);
 
 		// start read device.
-		do_read();
+		boost::asio::spawn(m_io_context,
+			boost::bind(&tun2socks::do_read, this, _1));
 
 		// start timer.
 		start_timer(0);
@@ -1066,71 +1067,75 @@ private:
 		});
 	}
 
-	void do_read()
+	void do_read(boost::asio::yield_context yield)
 	{
-		m_dev.async_read_some(m_buffer.prepare(1024 * 64),
-			[this](const boost::system::error_code& error, std::size_t bytes_transferred) mutable
+		boost::asio::steady_timer try_again_timer(m_io_context);
+
+		while (true)
 		{
-			if (error)
+			boost::system::error_code ec;
+			auto bytes_transferred = m_dev.async_read_some(m_buffer.prepare(1024 * 64), yield[ec]);
+			if (ec)
 			{
-				std::cout << "read error, " << error.message() << std::endl;
+				std::cout << "read error, " << ec.message() << std::endl;
 				return;
 			}
 
+			// linux tun read 0 == try again.
+			if (bytes_transferred == 0)
 			{
-				m_buffer.commit(bytes_transferred);
-
-				auto consumer = [this](std::size_t* len) mutable { m_buffer.consume(*len); };
-				typedef std::unique_ptr<std::size_t, decltype(consumer)> buffer_consume;
-				buffer_consume buffer_consumer(&bytes_transferred, consumer);
-
-				auto tmp = boost::asio::buffer_cast<const void*>(m_buffer.data());
-				auto data_len = bytes_transferred;
-
-				if (data_len == 0)
+				try_again_timer.async_wait(yield[ec]);
+				if (ec)
 				{
-					do_read();
+					std::cout << "try again error, " << ec.message() << std::endl;
 					return;
 				}
 
-				// obtain pbuf
-				if (data_len > std::numeric_limits<uint16_t>::max())
-				{
-					std::cout << "device read: packet too large\n";
-					return;
-				}
+				continue;
+			}
+			m_buffer.commit(bytes_transferred);
 
-				// 如果是udp包, 则按udp包处理
-				if (process_udp_packet((uint8_t*)tmp, data_len))
-				{
-					do_read();
-					return;
-				}
+			auto consumer = [this](std::size_t* len) mutable { m_buffer.consume(*len); };
+			typedef std::unique_ptr<std::size_t, decltype(consumer)> buffer_consume;
+			buffer_consume buffer_consumer(&bytes_transferred, consumer);
 
-				struct pbuf *p = pbuf_alloc(PBUF_RAW, static_cast<u16_t>(data_len), PBUF_POOL);
-				if (!p)
-				{
-					std::cout << "device read: pbuf_alloc failed\n";
-					return;
-				}
+			auto tmp = boost::asio::buffer_cast<const void*>(m_buffer.data());
+			auto data_len = bytes_transferred;
 
-				// write packet to pbuf
-				if (pbuf_take(p, tmp, static_cast<u16_t>(data_len)) != ERR_OK)
-				{
-					std::cout << "device read: write packet to pbuf failed\n";
-					return;
-				}
-
-				// pass pbuf to input
-				if (m_netif.input(p, &m_netif) != ERR_OK)
-				{
-					std::cout << "device read: input failed\n";
-					pbuf_free(p);
-				}
+			// obtain pbuf
+			if (data_len > std::numeric_limits<uint16_t>::max())
+			{
+				std::cout << "device read: packet too large\n";
+				continue;
 			}
 
-			do_read();
-		});
+			// 如果是udp包, 则按udp包处理
+			if (process_udp_packet((uint8_t*)tmp, data_len))
+			{
+				continue;
+			}
+
+			struct pbuf *p = pbuf_alloc(PBUF_RAW, static_cast<u16_t>(data_len), PBUF_POOL);
+			if (!p)
+			{
+				std::cout << "device read: pbuf_alloc failed\n";
+				continue;
+			}
+
+			// write packet to pbuf
+			if (pbuf_take(p, tmp, static_cast<u16_t>(data_len)) != ERR_OK)
+			{
+				std::cout << "device read: write packet to pbuf failed\n";
+				continue;
+			}
+
+			// pass pbuf to input
+			if (m_netif.input(p, &m_netif) != ERR_OK)
+			{
+				std::cout << "device read: input failed\n";
+				pbuf_free(p);
+			}
+		}
 	}
 
 	bool process_udp_packet(uint8_t* data, int data_len)
