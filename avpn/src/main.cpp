@@ -623,7 +623,6 @@ class tun2socks
 public:
 	tun2socks(boost::asio::io_context& io, tuntap& dev, std::string dns = "")
 		: m_io_context(io)
-		, m_strand(io)
 		, m_timer(io)
 		, m_dev(dev)
 		, m_dns_server(dns)
@@ -633,7 +632,10 @@ public:
 		, m_num_clients(0)
 	{}
 	~tun2socks()
-	{}
+	{
+		for (auto& q : m_buffer_queue)
+			pbuf_free(q);
+	}
 
 public:
 	bool start(const std::string& local, const std::string& mask,
@@ -704,8 +706,7 @@ public:
 	}
 
 private:
-	static
-		err_t netif_init_func(struct netif *netif)
+	static err_t netif_init_func(struct netif *netif)
 	{
 		std::cout << "netif func init\n";
 
@@ -734,14 +735,13 @@ private:
 	err_t common_netif_output(struct netif *netif, struct pbuf *p)
 	{
 		do {
-			do_write_pbuf(p);
+			write_pbuf(p);
 		} while (p = p->next);
 
 		return ERR_OK;
 	}
 
-	static
-		err_t netif_input_func(struct pbuf *p, struct netif *inp)
+	static err_t netif_input_func(struct pbuf *p, struct netif *inp)
 	{
 		uint8_t ip_version = 0;
 		if (p->len > 0)
@@ -783,7 +783,7 @@ private:
 		return ERR_OK;
 	}
 
-	void do_write_pbuf(struct pbuf* p)
+	void write_pbuf(struct pbuf* p)
 	{
 		bool write_in_progress = !m_buffer_queue.empty();
 
@@ -795,38 +795,35 @@ private:
 
 		if (!write_in_progress)
 		{
-			boost::asio::async_write(m_dev,
-				boost::asio::buffer(p->payload, p->len),
-				boost::asio::transfer_exactly(p->len),
-				boost::asio::bind_executor(m_strand,
-					boost::bind(&tun2socks::handle_write, this, boost::asio::placeholders::error)));
+			boost::asio::spawn(m_io_context,
+				boost::bind(&tun2socks::do_write, this, _1));
 		}
 	}
 
-	void handle_write(const boost::system::error_code& error)
+	void do_write(boost::asio::yield_context yield)
 	{
-		if (error)
+		boost::asio::steady_timer try_again_timer(m_io_context);
+
+		while (!m_buffer_queue.empty())
 		{
-			for (auto& q : m_buffer_queue)
-				pbuf_free(q);
+			boost::system::error_code ec;
+			auto p = m_buffer_queue.front();
+			auto bytes_transferred = m_dev.async_write_some(
+				boost::asio::buffer(p->payload, p->len), yield[ec]);
+			if (ec)
+				break;
 
-			std::cerr << error.message() << std::endl;
-			return;
-		}
+			if (bytes_transferred == 0)
+			{
+				try_again_timer.expires_from_now(std::chrono::milliseconds(64));
+				try_again_timer.async_wait(yield[ec]);
+				if (!ec)
+					continue;
+				break;
+			}
 
-		auto p = m_buffer_queue.front();
-		pbuf_free(p);
-
-		m_buffer_queue.pop_front();
-		if (!m_buffer_queue.empty())
-		{
-			p = m_buffer_queue.front();
-
-			boost::asio::async_write(m_dev,
-				boost::asio::buffer(p->payload, p->len),
-				boost::asio::transfer_exactly(p->len),
-				boost::asio::bind_executor(m_strand,
-					boost::bind(&tun2socks::handle_write, this, boost::asio::placeholders::error)));
+			pbuf_free(p);
+			m_buffer_queue.pop_front();
 		}
 	}
 
@@ -1011,7 +1008,7 @@ private:
 				&chk, IP_PROTO_UDP, chk.tot_len, &src_addr_t, &dst_addr_t); // checksum
 
 			pb->ref = 0; // 因为do_write_pbuf内部执行了pbuf_ref, 故意减为0.
-			do_write_pbuf(pb);
+			write_pbuf(pb);
 		}
 
 		// 继续读取下一组udp数据.
@@ -1236,7 +1233,6 @@ private:
 
 private:
 	boost::asio::io_context& m_io_context;
-	boost::asio::io_context::strand m_strand;
 	boost::asio::steady_timer m_timer;
 	buffer_queue m_buffer_queue;
 	boost::asio::streambuf m_buffer;
