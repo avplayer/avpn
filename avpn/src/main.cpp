@@ -1087,6 +1087,12 @@ private:
 				auto tmp = boost::asio::buffer_cast<const void*>(m_buffer.data());
 				auto data_len = bytes_transferred;
 
+				if (data_len == 0)
+				{
+					do_read();
+					return;
+				}
+
 				// obtain pbuf
 				if (data_len > std::numeric_limits<uint16_t>::max())
 				{

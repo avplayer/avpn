@@ -339,7 +339,8 @@ namespace tuntap_service {
 					// Check for EOF.
 					if (bytes_transferred == 0)
 					{
-						ec = boost::asio::error::eof;
+						// ec = boost::asio::error::eof;
+						boost::this_thread::sleep_for(boost::chrono::milliseconds(64));
 						break;
 					}
 
