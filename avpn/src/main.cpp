@@ -625,6 +625,8 @@ public:
 		: m_io_context(io)
 		, m_timer(io)
 		, m_dev(dev)
+		, m_dev_input_total(0)
+		, m_dev_output_total(0)
 		, m_dns_server(dns)
 		, m_socket_socks(io)
 		, m_udp_socket(io)
@@ -821,6 +823,8 @@ private:
 					continue;
 				break;
 			}
+
+			m_dev_output_total += bytes_transferred;
 
 			pbuf_free(p);
 			m_buffer_queue.pop_front();
@@ -1047,7 +1051,8 @@ private:
 				time_info = localtime(&current_time);
 
 				strftime(timeString, sizeof(timeString), "%H:%M:%S", time_info);
-				printf("%s\n", timeString);
+				printf("%s DEV INPUT: %8d, OUTPUT: %8d\n",
+					timeString, m_dev_input_total, m_dev_output_total);
 
 #if IP_REASSEMBLY
 				ip_reass_tmr();
@@ -1092,6 +1097,7 @@ private:
 				continue;
 			}
 			m_buffer.commit(bytes_transferred);
+			m_dev_input_total += bytes_transferred;
 
 			auto consumer = [this](std::size_t* len) mutable { m_buffer.consume(*len); };
 			typedef std::unique_ptr<std::size_t, decltype(consumer)> buffer_consume;
@@ -1237,6 +1243,8 @@ private:
 	buffer_queue m_buffer_queue;
 	boost::asio::streambuf m_buffer;
 	tuntap& m_dev;
+	int m_dev_input_total;
+	int m_dev_output_total;
 	struct netif m_netif;
 	std::string m_dns_server;
 	boost::local_shared_ptr<socks::socks_client> m_udp_socks;
@@ -1290,10 +1298,14 @@ int main(int argc, char** argv)
 
 	streambuf read_buf;
 
+#ifdef AVPN_LINUX
 	cfg.dev_name_ = "";
 	cfg.guid_ = "";
 	cfg.dev_type_ = tuntap_service::dev_tun;
 	cfg.tun_fd_ = -1;
+#else
+	cfg.dev_type_ = tuntap_service::dev_tun;
+#endif
 	if (!tap.open(cfg))
 	{
 		printf("open tun device fail!\n");
