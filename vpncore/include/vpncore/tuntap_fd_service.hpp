@@ -425,8 +425,8 @@ namespace tuntap_service {
 					// Check for EOF.
 					if (bytes_transferred == 0)
 					{
-						ec = boost::asio::error::eof;
-						break;
+						// ec = boost::asio::error::eof;
+						continue;	// retry, linux tun api is ugly, so...
 					}
 
 					// Operation failed.
