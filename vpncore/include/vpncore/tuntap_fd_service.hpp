@@ -356,7 +356,7 @@ namespace tuntap_service {
 			}
 
 			void do_complete(const boost::system::error_code& ec,
-											std::size_t bytes_transferred)
+				std::size_t bytes_transferred)
 			{
 				handler_(ec, bytes_transferred);
 				delete this;
