@@ -1051,7 +1051,7 @@ private:
 				time_info = localtime(&current_time);
 
 				strftime(timeString, sizeof(timeString), "%H:%M:%S", time_info);
-				printf("%s DEV INPUT: %8d, OUTPUT: %8d\n",
+				printf("%s INPUT: %8d, OUTPUT: %8d\n",
 					timeString, m_dev_input_total, m_dev_output_total);
 
 #if IP_REASSEMBLY
