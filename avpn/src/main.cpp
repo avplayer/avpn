@@ -1084,6 +1084,7 @@ private:
 			// linux tun read 0 == try again.
 			if (bytes_transferred == 0)
 			{
+				try_again_timer.expires_from_now(std::chrono::milliseconds(64));
 				try_again_timer.async_wait(yield[ec]);
 				if (ec)
 				{
