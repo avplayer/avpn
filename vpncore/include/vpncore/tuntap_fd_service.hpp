@@ -140,7 +140,6 @@ namespace tuntap_service {
 		explicit tuntap_fd_service(boost::asio::io_context& io_context)
 			: boost::asio::io_context::service(io_context)
 			, m_work_context()
-			, m_work_strand(m_work_context)
 			, m_work(boost::asio::make_work_guard(m_work_context))
 			, m_work_thread(new boost::thread(
 				boost::bind(&boost::asio::io_context::run, &m_work_context)))
@@ -591,7 +590,6 @@ namespace tuntap_service {
 
 	private:
 		boost::asio::io_context m_work_context; // 用于模拟事件机制.
-		boost::asio::io_context::strand m_work_strand;
 		boost::asio::executor_work_guard<
 			boost::asio::io_context::executor_type> m_work;
 		boost::scoped_ptr<boost::thread> m_work_thread;
