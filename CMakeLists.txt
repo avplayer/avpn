@@ -139,17 +139,14 @@ if (ENABLE_JEMALLOC_STATIC)
 endif()
 
 set(BOOST_INCLUDE_DIRS ${CMAKE_CURRENT_SOURCE_DIR}/third_party/boost)
-set(LWIP_INCLUDE_DIRS ${CMAKE_CURRENT_SOURCE_DIR}/third_party/lwip/src/include)
 
 add_definitions(-DBOOST_COROUTINES_NO_DEPRECATION_WARNING)
 add_subdirectory(third_party/boost)
 include_directories(${BOOST_INCLUDE_DIRS})
 
-add_subdirectory(third_party/lwip)
 add_subdirectory(vpncore)
 
 include_directories(
-	${LWIP_INCLUDE_DIRS}
 	${VPNCORE_INCLUDE_DIRS}
 )
 
@@ -160,7 +157,6 @@ elseif(UNIX AND NOT APPLE)
 endif()
 
 link_libraries(
-	${LWIP_LIBRARIES}
 	${VPNCORE_LIBRARIES}
 	Boost::system Boost::thread Boost::chrono Boost::program_options Boost::locale Boost::random Boost::coroutine
 )
