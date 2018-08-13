@@ -16,6 +16,7 @@
 #include "vpncore/socks_client.hpp"
 #include "vpncore/tuntap.hpp"
 #include "vpncore/avpn_acceptor.hpp"
+#include "vpncore/tun2socks.hpp"
 
 using namespace tuntap_service;
 using namespace avpncore;

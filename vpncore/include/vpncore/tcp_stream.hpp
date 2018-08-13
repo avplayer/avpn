@@ -112,6 +112,11 @@ namespace avpncore {
 			, m_abort(false)
 		{}
 
+		~tcp_stream()
+		{
+			LOG_DBG << "!!! tcp_stream quit, " << m_endp;
+		}
+
 		void set_handlers(write_ip_packet_func cb, accept_handler ah)
 		{
 			m_callback_func = cb;
