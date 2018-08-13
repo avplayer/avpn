@@ -263,10 +263,7 @@ namespace tuntap_service {
 
 			// 复制mac地址.
 			m_mac_addr.resize(6);
-			if (ifr.ifr_hwaddr.sa_data)
-			{
-				memcpy(m_mac_addr.data(), ifr.ifr_hwaddr.sa_data, 6);
-			}
+			memcpy(m_mac_addr.data(), ifr.ifr_hwaddr.sa_data, 6);
 
 			// 设置fd为非阻塞.
 //			if (fcntl(fd, F_SETFL, O_NONBLOCK) < 0)
@@ -516,7 +513,7 @@ namespace tuntap_service {
 		}
 
 #ifdef AVPN_LINUX
-		// friend 
+		// friend
 		static int list_tuntap_func(const struct sockaddr_nl *who,
 			struct nlmsghdr *n, void *arg)
 		{
