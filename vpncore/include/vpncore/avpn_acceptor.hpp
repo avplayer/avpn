@@ -20,6 +20,7 @@
 #include <boost/asio/ip/tcp.hpp>
 #include <boost/config.hpp>
 
+#include "vpncore/logging.hpp"
 #include "vpncore/tuntap.hpp"
 using namespace tuntap_service;
 
@@ -356,7 +357,7 @@ namespace avpncore {
 			{
 				if (m_tsm.state_ != tcp_state::ts_invalid)
 					m_tsm.state_ = tcp_state::ts_closed;
-				printf("%s recv flags.flag.rst\n", m_endp.to_string().c_str());
+				LOG_DBG << m_endp << "recv flags.flag.rst";
 				return;
 			}
 
@@ -364,7 +365,7 @@ namespace avpncore {
 			// tcp keep alive, only ack.
 			if (m_tsm.state_ == tcp_state::ts_established && seq == m_tsm.seq_ - 1)
 			{
-				printf("%s, tcp keep alive, skip it\n", m_endp.to_string().c_str());
+				LOG_DBG << m_endp << " tcp keep alive, skip it";
 				keep_alive = true;
 				return;
 			}
@@ -387,7 +388,7 @@ namespace avpncore {
 					return;
 
 				m_tsm.state_ = tcp_state::ts_syn_rcvd;	// 更新状态为syn接收到的状态.
-				printf("%s, tcp_state::ts_syn_rcvd\n", m_endp.to_string().c_str());
+				LOG_DBG << m_endp << " tcp_state::ts_syn_rcvd";
 
 				// 通知用户层接收到连接.
 				boost::system::error_code ec;
@@ -404,7 +405,7 @@ namespace avpncore {
 				}
 
 				m_tsm.state_ = tcp_state::ts_syn_rcvd;	// 更新状态为syn接收到的状态.
-				printf("%s, retransmission tcp_state::ts_syn_rcvd\n", m_endp.to_string().c_str());
+				LOG_DBG << m_endp << " retransmission tcp_state::ts_syn_rcvd";
 				return;
 			}
 			break;
@@ -420,7 +421,7 @@ namespace avpncore {
 				else
 				{
 					m_tsm.state_ = tcp_state::ts_established;	// 连接建立.
-					printf("%s, tcp_state::ts_established\n", m_endp.to_string().c_str());
+					LOG_DBG << m_endp << " tcp_state::ts_established";
 				}
 			}
 			case tcp_state::ts_established:
@@ -445,7 +446,7 @@ namespace avpncore {
 				// 同时发出fin, 转为状态ts_time_wait, 回复ack, 关闭这个连接.
 				if (flags.flag.fin && flags.flag.ack)
 				{
-					printf("%s, tcp_state::ts_closed\n", m_endp.to_string().c_str());
+					LOG_DBG << m_endp << " tcp_state::ts_closed";
 					m_tsm.state_ = tcp_state::ts_closed;
 					// m_tsm.state_ = tcp_state::ts_time_wait;
 					need_ack = true;
@@ -456,7 +457,7 @@ namespace avpncore {
 				{
 					if (flags.flag.fin)	// 收到fin, 回复ack.
 					{
-						printf("%s, tcp_state::ts_closing\n", m_endp.to_string().c_str());
+						LOG_DBG << m_endp << " tcp_state::ts_closing";
 						m_tsm.state_ = tcp_state::ts_closing;
 						need_ack = true;
 					}
@@ -470,7 +471,7 @@ namespace avpncore {
 				if (!need_ack)
 				{
 					// 只是收到ack, 转为fin_wait_2, 等待本地客户端的fin.
-					printf("%s, tcp_state::ts_fin_wait_2\n", m_endp.to_string().c_str());
+					LOG_DBG << m_endp << " tcp_state::ts_fin_wait_2";
 					m_tsm.state_ = tcp_state::ts_fin_wait_2;
 					return;
 				}
@@ -487,7 +488,7 @@ namespace avpncore {
 				// 收到fin, 发回ack, 并关闭这个连接, 进入2MSL状态.
 				if (flags.flag.fin)
 				{
-					printf("%s, tcp_state::ts_closed\n", m_endp.to_string().c_str());
+					LOG_DBG << m_endp << " tcp_state::ts_closed";
 					m_tsm.state_ = tcp_state::ts_closed;
 					// m_tsm.state_ = tcp_state::ts_time_wait;
 				}
@@ -517,7 +518,7 @@ namespace avpncore {
 
 				// 如果是close_wait, 则表示收到是last ack, 关闭这个连接.
 				// 如果是closing, 则表示收到的是fin的ack, 进入2MSL状态.
-				printf("%s, tcp_state::ts_closed\n", m_endp.to_string().c_str());
+				LOG_DBG << m_endp << " tcp_state::ts_closed";
 				m_tsm.state_ = tcp_state::ts_closed;
 				// m_tsm.state_ = tcp_state::ts_time_wait;
 				return;
@@ -623,18 +624,18 @@ namespace avpncore {
 			// 连接状态, 主动关闭连接, 发送fin给本地, 并进入fin_wait1状态.
 			if (m_tsm.state_ == tcp_state::ts_established)
 			{
-				printf("%s, tcp_state::ts_fin_wait_1\n", m_endp.to_string().c_str());
+				LOG_DBG << m_endp << " tcp_state::ts_fin_wait_1";
 				m_tsm.state_ = tcp_state::ts_fin_wait_1;
 			}
 			else if (m_tsm.state_ == tcp_state::ts_close_wait)
 			{
 				// 已经收到fin, 发送fin给本地, 并进入ts_last_ack状态.
-				printf("%s, tcp_state::ts_last_ack\n", m_endp.to_string().c_str());
+				LOG_DBG << m_endp << " tcp_state::ts_last_ack";
 				m_tsm.state_ = tcp_state::ts_last_ack;
 			}
 			else
 			{
-				printf("%s, rst & tcp_state::ts_closed\n", m_endp.to_string().c_str());
+				LOG_DBG << m_endp << " rst & tcp_state::ts_closed";
 				m_tsm.state_ = tcp_state::ts_closed;
 				rst = true;
 			}
@@ -683,7 +684,7 @@ namespace avpncore {
 			m_tsm.lseq_ += 1;
 
 			// 状态置为关闭.
-			printf("%s, rst tcp_state::ts_closed\n", m_endp.to_string().c_str());
+			LOG_DBG << m_endp << " rst tcp_state::ts_closed";
 			m_tsm.state_ = tcp_state::ts_closed;
 
 			// 回调写回数据.
@@ -1005,8 +1006,7 @@ namespace avpncore {
 				// 连接到socks服务器.
 				if (!connect_socks(yield, socks, m_socks_server, socks_addr))
 				{
-					printf("SOCKS5, can't connect to server: 0x%p, %s\n",
-						ts, ts->tcp_endpoint_pair().to_string().c_str());
+					LOG_DBG << "* SOCKS5, can't connect to server: " << ts->tcp_endpoint_pair();
 					ts->accept(tcp_stream::ac_deny);
 					return;
 				}
@@ -1016,8 +1016,8 @@ namespace avpncore {
 				auto endp = ts->tcp_endpoint_pair();
 				local = endp.dst_.address();
 
-				printf("SOCKS5, 0x%p want to connent remote: %s:%d\n",
-					ts, local.to_string().c_str(), endp.dst_.port());
+				LOG_DBG << "* SOCKS5, " << ts->tcp_endpoint_pair()
+					<< " do socks5 handshake!";
 
 				boost::system::error_code ignore_ec;
 				socks.set_option(tcp::no_delay(true), ignore_ec);
@@ -1035,15 +1035,16 @@ namespace avpncore {
 				{
 					if (err)
 					{
-						printf("SOCKS5, fail connect: 0x%p, %s\n",
-							ts, ts->tcp_endpoint_pair().to_string().c_str());
+						LOG_DBG << "* SOCKS5, " << ts->tcp_endpoint_pair()
+							<< " fail to handshake!";
 						ts->accept(tcp_stream::ac_deny);
 						return;
 					}
 
 					ts->accept(tcp_stream::ac_allow);
-					printf("SOCKS5, 0x%p successed to connect: %s:%d\n",
-						ts, local.to_string().c_str(), endp.dst_.port());
+
+					LOG_DBG << "* SOCKS5, " << ts->tcp_endpoint_pair()
+						<< " successed to handshake!";
 
 					run(socks_ptr, ts);
 				});
@@ -1082,8 +1083,7 @@ namespace avpncore {
 					auto bytes = socks.async_read_some(buffer.prepare(recv_buffer_size), yield[ec]);
 					if (ec)
 					{
-						printf("0x%p, read socks addr: %s, error: %s\n",
-							ts, endp.to_string().c_str(), ec.message().c_str());
+						LOG_DBG << ts->tcp_endpoint_pair() << " read socks " << ec.message();
 						socks.shutdown(boost::asio::ip::tcp::socket::shutdown_receive, ec);
 						ts->close();
 						break;
@@ -1098,8 +1098,7 @@ namespace avpncore {
 					buffer.consume(ret);
 				}
 
-				printf("0x%p, %s, read socks total: %d\n",
-					ts, endp.to_string().c_str(), total);
+				LOG_DBG << ts->tcp_endpoint_pair() << " read socks total: " << total;
 			});
 
 			boost::asio::spawn([this, ts, socks_ptr]
@@ -1135,8 +1134,7 @@ namespace avpncore {
 					auto bytes = boost::asio::async_write(socks, buffer, yield[ec]);
 					if (ec)
 					{
-						printf("0x%p, socks local addr: %s, error: %s\n",
-							ts, endp.to_string().c_str(), ec.message().c_str());
+						LOG_DBG << ts->tcp_endpoint_pair() << " write local: " << ec.message();
 						socks.shutdown(boost::asio::ip::tcp::socket::shutdown_send, ec);
 						ts->close();
 						break;
@@ -1144,8 +1142,7 @@ namespace avpncore {
 					buffer.consume(bytes);
 				}
 
-				printf("0x%p, %s, read tuntap total: %d\n",
-					ts, endp.to_string().c_str(), total);
+				LOG_DBG << ts->tcp_endpoint_pair() << " read tuntap total: " << total;
 			});
 		}
 

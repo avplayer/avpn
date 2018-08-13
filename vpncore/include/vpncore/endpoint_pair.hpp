@@ -1,6 +1,8 @@
 ﻿#pragma once
-
+#include <iostream>
 #include <boost/asio/ip/tcp.hpp>
+
+#include "vpncore/logging.hpp"
 
 namespace avpncore {
 
@@ -115,4 +117,18 @@ namespace std
 			return seed;
 		}
 	};
+}
+
+namespace logging {
+	logger& operator<<(logger& log, const boost::asio::ip::tcp::endpoint& endp)
+	{
+		log << endp.address().to_string() << ":" << endp.port();
+		return log;
+	}
+
+	logger& operator<<(logger& log, const avpncore::endpoint_pair& endp)
+	{
+		log << endp.src_ << " - " << endp.dst_;
+		return log;
+	}
 }
