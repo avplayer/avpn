@@ -375,6 +375,8 @@ namespace avpncore {
 
 			switch (m_tsm.state_)
 			{
+			case tcp_state::ts_listen:
+			case tcp_state::ts_time_wait:
 			case tcp_state::ts_closed:
 			{
 				// 关闭了还发数据过来, rst响应之.
