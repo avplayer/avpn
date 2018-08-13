@@ -317,16 +317,24 @@ namespace avpncore {
 			auto payload_len = total - (20 + offset);
 
 			if (flags.flag.syn && m_tsm.state_ != ts_invalid)
+			{
+				LOG_DBG << m_endp << " unexpected syn, skip it!";
 				return;
+			}
 
 			m_tsm.win_ = ws;
 
 			// 收到rst强制中断.
 			if (flags.flag.rst)
 			{
+				if (m_tsm.state_ == tcp_state::ts_invalid && m_accept_handler)
+				{
+					m_accept_handler(boost::asio::error::network_reset);
+					m_accept_handler.swap(accept_handler());
+				}
 				m_tsm.state_ = tcp_state::ts_closed;
-				do_close();
 				LOG_DBG << m_endp << " " << tcp_state_string(last_state) << " -> flags.flag.rst";
+				do_close();
 				return;
 			}
 
@@ -357,15 +365,27 @@ namespace avpncore {
 			break;
 			case tcp_state::ts_invalid:	// 初始状态, 如果不是syn, 则是个错误的数据包, 这里跳过.
 			{
-				if (!flags.flag.syn || flags.flag.ack)
+				boost::system::error_code ec;
+				if (!flags.flag.syn)
+				{
+					if (m_accept_handler)
+					{
+						m_accept_handler(boost::asio::error::network_reset);
+						m_accept_handler.swap(accept_handler());
+					}
+					reset();
 					return;
+				}
 
 				m_tsm.state_ = tcp_state::ts_syn_rcvd;	// 更新状态为syn接收到的状态.
 				LOG_DBG << m_endp << " " << tcp_state_string(last_state)  << " -> tcp_state::ts_syn_rcvd";
 
 				// 通知用户层接收到连接.
-				boost::system::error_code ec;
-				m_accept_handler(ec);
+				if (m_accept_handler)
+				{
+					m_accept_handler(ec);
+					m_accept_handler.swap(accept_handler());
+				}
 				return;	// 直接返回, 由用户层确认是否接受连接回复syn ack.
 			}
 			break;

@@ -61,6 +61,8 @@ namespace avpncore {
 		tun2socks(boost::asio::io_context& io, tuntap& dev, std::string dns = "")
 			: m_io_context(io)
 			, m_dev(dev)
+			, m_num_ready(0)
+			, m_num_using(0)
 		{
 		}
 
@@ -87,6 +89,8 @@ namespace avpncore {
 			{
 				tcp_stream* ts = make_tcp_stream();
 				m_tcp_streams[ts] = ts->self();
+
+				m_num_ready++;
 				m_avpn_acceptor->async_accept(ts);
 			}
 
@@ -103,6 +107,14 @@ namespace avpncore {
 			tcp_stream* new_ts = make_tcp_stream();
 			m_tcp_streams[new_ts] = new_ts->self();
 			m_avpn_acceptor->async_accept(new_ts);
+
+			LOG_DBG << "current num backlog: " << m_avpn_acceptor->num_backlog();
+
+			if (ec)
+			{
+				LOG_DBG << ts->tcp_endpoint_pair() << " accept error: " << ec.message();
+				return;
+			}
 
 			auto self = ts->self();
 
@@ -300,6 +312,8 @@ namespace avpncore {
 		boost::asio::steady_timer m_timer{ m_io_context };
 		boost::local_shared_ptr<avpn_acceptor> m_avpn_acceptor;
 		std::unordered_map<tcp_stream*, tcp_stream_ptr> m_tcp_streams;
+		int m_num_ready;
+		int m_num_using;
 		std::string m_socks_server;
 	};
 

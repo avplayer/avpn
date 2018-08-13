@@ -70,6 +70,11 @@ namespace avpncore {
 			m_demultiplexer.erase(pair);
 		}
 
+		std::size_t num_backlog() const
+		{
+			return m_accept_list.size();
+		}
+
 	protected:
 		void demux_ip_packet(boost::asio::yield_context yield)
 		{
