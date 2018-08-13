@@ -3,8 +3,10 @@
 #include <vector>
 #include <memory>
 
-#include "boost/asio.hpp"
-#include "tuntap_config.hpp"
+#include <boost/asio/io_context.hpp>
+#include <boost/asio/async_result.hpp>
+
+#include "vpncore/tuntap_config.hpp"
 
 namespace tuntap_service {
 

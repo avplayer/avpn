@@ -16,6 +16,8 @@
 # pragma once
 #endif // defined(_MSC_VER) && (_MSC_VER >= 1200)
 
+#include <string>
+
 namespace socks {
 
 	template <class T> struct type {};

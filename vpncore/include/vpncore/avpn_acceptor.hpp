@@ -2,719 +2,31 @@
 #include <memory>
 #include <deque>
 #include <unordered_map>
+#include <functional>
 
 #include <boost/asio/spawn.hpp>
-#include <boost/function.hpp>
-#include <boost/bind.hpp>
 
 #include <boost/container_hash/hash.hpp>
 #include <boost/enable_shared_from_this.hpp>
 
-#include <boost/endian/arithmetic.hpp>
-#include <boost/endian/buffers.hpp>
-#include <boost/static_assert.hpp>
 #include <boost/smart_ptr/local_shared_ptr.hpp>
 #include <boost/smart_ptr/make_local_shared.hpp>
 
-#include <boost/asio/bind_executor.hpp>
 #include <boost/asio/ip/tcp.hpp>
 #include <boost/config.hpp>
 
 #include "vpncore/logging.hpp"
-#include "vpncore/tuntap.hpp"
-using namespace tuntap_service;
 
 #include "vpncore/endpoint_pair.hpp"
 #include "vpncore/chksum.hpp"
+#include "vpncore/ip_buffer.hpp"
+#include "vpncore/tcp_stream.hpp"
+
+#include "vpncore/tuntap.hpp"
+using namespace tuntap_service;
+
 
 namespace avpncore {
-
-	// 定义IP包数据缓存结构, 这个结构允许
-	// 自己管理自己的内存, 使用 boost::local_shared_ptr 来管理
-	// 内存资源, 主要是这里不需要考虑线程安全, 避免原子操作.
-	// 因为avpn的为异步设计, 整个avpncore程序总是运行在一个线程中
-	// 类似于nodejs, 但并不表示做不到多线程.
-	// 支持多线程需要实现一个线程安全的ip包分离, 然后将不同tcp
-	// 连接的ip包通过线程安全的方式给到tcp stream中, 同样 tcp stream
-	// 也需要一个线程安全的方式将组好的ip包回传到ip包分离器.
-	// 实践证明, 纯io而非大量cpu密集计算对多线程的需求并不大, 反而
-	// 容易因为多线程的调度以及线程安全上锁等导致io效率降低.
-	// avpn恰好是一个纯io而大量cpu密集计算的程序.
-	struct ip_buffer
-	{
-		ip_buffer()
-			: len_(-1)
-		{}
-
-		ip_buffer(int len)
-			: buf_(new uint8_t[len])
-			, len_(len)
-		{}
-
-		void assign(uint8_t* p, int len)
-		{
-			buf_.reset(new uint8_t[len]);
-			std::memcpy(buf_.get(), p, len);
-			len_ = len;
-		}
-
-		void attach(uint8_t* p, int len)
-		{
-			buf_.reset(p);
-			len_ = len;
-		}
-
-		uint8_t* data() const
-		{
-			return buf_.get();
-		}
-
-		int len() const
-		{
-			return len_;
-		}
-
-		bool empty() const
-		{
-			if (len_ <= 0 || !buf_)
-				return true;
-			return false;
-		}
-
-		boost::local_shared_ptr<uint8_t> buf_;
-		int len_;
-		int type_; // same as ip_type
-	};
-
-	enum ip_type
-	{
-		ip_tcp = 0x06,
-		ip_udp = 0x11,
-	};
-
-
-	// 定义接收到tcp连接请求时的accept handler, 每个tcp连接收到
-	// syn将会触发这个handler的调用, 在这个handler中, 需要确认
-	// 是否接受或拒绝这个tcp连接, 如果拒绝将会发回一个rst/fin的
-	// 数据包, 在这个handler里使用accept函数来确认是否接受这个
-	// syn连接请求.
-	using accept_handler =
-		boost::function<void(const boost::system::error_code&)>;
-
-	class tcp_stream
-	{
-		enum tcp_state
-		{
-			ts_invalid = -1,
-			ts_closed = 0,
-			ts_listen = 1,
-			ts_syn_sent = 2,
-			ts_syn_rcvd = 3,
-			ts_established = 4,
-			ts_fin_wait_1 = 5,
-			ts_fin_wait_2 = 6,
-			ts_close_wait = 7,
-			ts_closing = 8,
-			ts_last_ack = 9,
-			ts_time_wait = 10
-		};
-
-		union tcp_flags {
-			struct unamed_struct
-			{
-				bool fin : 1;
-				bool syn : 1;
-				bool rst : 1;
-				bool psh : 1;
-				bool ack : 1;
-				bool urg : 1;
-				bool ece : 1;
-				bool cwr : 1;
-			} flag;
-			uint8_t data;
-		};
-
-		struct tsm	// tcp state machine
-		{
-			tsm()
-				: state_(ts_invalid)
-				, seq_(0)
-				, ack_(0)
-				, win_(0)
-				, lseq_(0)
-				, lack_(0)
-				, lwin_(0)
-			{}
-
-			tcp_state state_;
-			uint32_t seq_;
-			uint32_t ack_;	// 对端发过来的ack,用来确认是否丢包, 这里不存在丢包所以不用处理.
-			uint32_t win_;
-
-			uint32_t lseq_;	// 随本端数据 发送而增大.
-			uint32_t lack_;	// 最后回复的ack, 是seq+收到的数据的大小.
-			uint32_t lwin_;
-		};
-
-		int make_tcp_header(const uint8_t* tcp, int len,
-			const endpoint_pair& endp,
-			int seq, int ack, uint8_t flags)
-		{
-			*(uint16_t*)(tcp + 0) = ntohs(endp.src_.port());	// src port
-			*(uint16_t*)(tcp + 2) = ntohs(endp.dst_.port());	// dst port
-
-			*(uint32_t*)(tcp + 4) = ntohl(seq);	// seq
-			*(uint32_t*)(tcp + 8) = ntohl(ack);	// ack
-
-			*(uint8_t*)(tcp + 12) = 0x50;					// offset
-
-			*(uint8_t*)(tcp + 13) = flags;					// flag
-			*(uint16_t*)(tcp + 14) = 0xffff;				// ws
-			*(uint16_t*)(tcp + 16) = 0;						// chksum
-			*(uint16_t*)(tcp + 18) = 0;						// urg
-
-															// calc chksum, 固定长度20字节.
-			*(uint16_t*)(tcp + 16) = tcp_chksum_pseudo(tcp, len, endp);
-
-			return 20;
-		}
-
-	public:
-
-		// write_ip_packet_func 用于写入一个ip包
-		// 到底层.
-		using write_ip_packet_func = boost::function<void(
-			const endpoint_pair&, ip_buffer)>;
-
-		tcp_stream(boost::asio::io_context& io_context)
-			: m_io_context(io_context)
-			, m_accepted(false)
-			, m_abort(false)
-		{}
-
-		void set_handlers(write_ip_packet_func cb, accept_handler ah)
-		{
-			m_callback_func = cb;
-			m_accept_handler = ah;	// 如果是连接请求则回调.
-		}
-
-		// 当用户收到accept得到它的时候，
-		// 并向外发起连接后，将状态给回
-		// 本地连接时，设置使用.
-		// 本地连接根据设置状态发回本地连接.
-		enum accept_state
-		{
-			ac_allow,
-			ac_deny,
-			ac_reset,
-		};
-
-		void accept(accept_state state)
-		{
-			if (m_accepted)
-				return;
-			m_accepted = true;
-
-			ip_buffer buffer(40);
-			auto ip = buffer.data();
-			auto tcp = ip + 20;
-			auto& rsv = m_endp_reserve;
-
-			tcp_flags flags;
-			flags.data = 0;
-			int tcp_header_len = 0;
-
-			m_tsm.lack_ = m_tsm.seq_ + 1;
-
-			// 回复syn ack.
-			if (state == ac_allow)
-			{
-				flags.flag.syn = 1;
-				flags.flag.ack = 1;
-			}
-			else if (state == ac_deny)
-			{
-				flags.flag.syn = 1;
-				flags.flag.fin = 1;
-			}
-			else
-			{
-				flags.flag.ack = 1;
-				flags.flag.syn = 1;
-				flags.flag.rst = 1;
-			}
-
-			make_tcp_header(tcp, 20, rsv, m_tsm.lseq_, m_tsm.lack_, flags.data);
-
-			// 回复ack之后本地seq加1
-			m_tsm.lseq_ += 1;
-
-			// 更新为syn包已经发送的状态.
-			m_tsm.state_ = tcp_state::ts_syn_sent;
-
-			// 回调写回数据.
-			m_callback_func(rsv, buffer);
-		}
-
-		// 接收底层ip数据.
-		void output(const uint8_t* buf, int len)
-		{
-			const uint8_t* p = buf;
-
-			uint8_t ihl = ((*(uint8_t*)(p)) & 0x0f) * 4;
-			uint16_t total = ntohs(*(uint16_t*)(p + 2));
-			uint8_t type = *(uint8_t*)(p + 9);
-			uint32_t src_ip =(*(uint32_t*)(p + 12));
-			uint32_t dst_ip =(*(uint32_t*)(p + 16));
-
-			if (type != ip_tcp) // only tcp
-				return;
-
-			p = p + ihl;
-
-			uint16_t src_port = (*(uint16_t*)(p + 0));
-			uint16_t dst_port = (*(uint16_t*)(p + 2));
-
-			if (m_endp.empty())
-			{
-				endpoint_pair endp(src_ip, src_port, dst_ip, dst_port);
-				endp.type_ = type;
-				m_endp = endp;
-				m_endp_reserve = endp;
-				m_endp_reserve.reserve();
-			}
-
-			// 下面开始执行tcp状态机, 总体参考下面实现, 稍作修改的地方几个就是这里初始状态设置
-			// 为ts_invalid, 而不是closed, 因为这里我需要判断一个tcp stream对象是已经closed
-			// 的, 还是新开的等待连接的对象, 另外执行到time_wait时, 按标准需要等待2MSL个时间
-			// 再关闭, 在这个时间一直占用, 因为avpn里当一个连接到time_wait状态的时候, 对外实际
-			// 是一个连接, 这个连接关闭了并不影响下一次, client使用相同ip:port来向相同server:
-			// port发起请求.
-			//
-			//
-			//                              +---------+ ---------\      active OPEN
-			//                              |  CLOSED |            \    -----------
-			//                              +---------+<---------\   \   create TCB
-			//                                |     ^              \   \  snd SYN
-			//                   passive OPEN |     |   CLOSE        \   \
-			//                   ------------ |     | ----------       \   \
-			//                    create TCB  |     | delete TCB         \   \
-			//                                V     |                      \   \
-			//                              +---------+            CLOSE    |    \
-			//                              |  LISTEN |          ---------- |     |
-			//                              +---------+          delete TCB |     |
-			//                   rcv SYN      |     |     SEND              |     |
-			//                  -----------   |     |    -------            |     V
-			// +---------+      snd SYN,ACK  /       \   snd SYN          +---------+
-			// |         |<-----------------           ------------------>|         |
-			// |   SYN   |                    rcv SYN                     |   SYN   |
-			// |   RCVD  |<-----------------------------------------------|   SENT  |
-			// |         |                    snd ACK                     |         |
-			// |         |------------------           -------------------|         |
-			// +---------+   rcv ACK of SYN  \       /  rcv SYN,ACK       +---------+
-			//   |           --------------   |     |   -----------
-			//   |                  x         |     |     snd ACK
-			//   |                            V     V
-			//   |  CLOSE                   +---------+
-			//   | -------                  |  ESTAB  |
-			//   | snd FIN                  +---------+
-			//   |                   CLOSE    |     |    rcv FIN
-			//   V                  -------   |     |    -------
-			// +---------+          snd FIN  /       \   snd ACK          +---------+
-			// |  FIN    |<-----------------           ------------------>|  CLOSE  |
-			// | WAIT-1  |------------------                              |   WAIT  |
-			// +---------+          rcv FIN  \                            +---------+
-			//   | rcv ACK of FIN   -------   |                            CLOSE  |
-			//   | --------------   snd ACK   |                           ------- |
-			//   V        x                   V                           snd FIN V
-			// +---------+                  +---------+                   +---------+
-			// |FINWAIT-2|                  | CLOSING |                   | LAST-ACK|
-			// +---------+                  +---------+                   +---------+
-			//   |                rcv ACK of FIN |                 rcv ACK of FIN |
-			//   |  rcv FIN       -------------- |    Timeout=2MSL -------------- |
-			//   |  -------              x       V    ------------        x       V
-			//    \ snd ACK                 +---------+delete TCB         +---------+
-			//     ------------------------>|TIME WAIT|------------------>| CLOSED  |
-			//                              +---------+                   +---------+
-
-
-			uint32_t seq = ntohl(*(uint32_t*)(p + 4));
-			m_tsm.ack_ = ntohl(*(uint32_t*)(p + 8));
-			uint32_t offset = (((*(p + 12)) >> 4) & 0x0f) * 4;
-			tcp_flags flags;
-			flags.data = *(p + 13);
-			uint16_t ws = ntohs(*(uint16_t*)(p + 14));
-			uint32_t chksum = ntohl(*(uint32_t*)(p + 16));
-			auto payload_len = total - (20 + offset);
-
-			if (flags.flag.syn && m_tsm.state_ != ts_invalid)
-				return;
-
-			m_tsm.win_ = ws;
-
-			// 收到rst强制中断.
-			if (flags.flag.rst)
-			{
-				if (m_tsm.state_ != tcp_state::ts_invalid)
-					m_tsm.state_ = tcp_state::ts_closed;
-				LOG_DBG << m_endp << "recv flags.flag.rst";
-				return;
-			}
-
-			bool keep_alive = false;
-			// tcp keep alive, only ack.
-			if (m_tsm.state_ == tcp_state::ts_established && seq == m_tsm.seq_ - 1)
-			{
-				LOG_DBG << m_endp << " tcp keep alive, skip it";
-				keep_alive = true;
-				return;
-			}
-
-			// 记录当前seq.
-			m_tsm.seq_ = seq;
-
-			switch (m_tsm.state_)
-			{
-			case tcp_state::ts_listen:
-			case tcp_state::ts_time_wait:
-			case tcp_state::ts_closed:
-			{
-				// 关闭了还发数据过来, rst响应之.
-				reset();
-				return;
-			}
-			break;
-			case tcp_state::ts_invalid:	// 初始状态, 如果不是syn, 则是个错误的数据包, 这里跳过.
-			{
-				if (!flags.flag.syn || flags.flag.ack)
-					return;
-
-				m_tsm.state_ = tcp_state::ts_syn_rcvd;	// 更新状态为syn接收到的状态.
-				LOG_DBG << m_endp << " tcp_state::ts_syn_rcvd";
-
-				// 通知用户层接收到连接.
-				boost::system::error_code ec;
-				m_accept_handler(ec);
-				return;	// 直接返回, 由用户层确认是否接受连接回复syn ack.
-			}
-			break;
-			case tcp_state::ts_syn_rcvd:
-			{
-				if (!flags.flag.syn)
-				{
-					reset();
-					return;
-				}
-
-				m_tsm.state_ = tcp_state::ts_syn_rcvd;	// 更新状态为syn接收到的状态.
-				LOG_DBG << m_endp << " retransmission tcp_state::ts_syn_rcvd";
-				return;
-			}
-			break;
-			case tcp_state::ts_syn_sent: // 这个状态只表示被动回复syn, 而不是主动syn请求.
-			{
-				// 期望客户端回复ack完成握手, 因为前面已经发了syn ack,
-				// 这里收到的不是ack的话, 肯定是出错了, 这里先暂时跳过.
-				if (!flags.flag.ack)
-				{
-					reset();
-					return;
-				}
-				else
-				{
-					m_tsm.state_ = tcp_state::ts_established;	// 连接建立.
-					LOG_DBG << m_endp << " tcp_state::ts_established";
-				}
-			}
-			case tcp_state::ts_established:
-			{
-				// 收到客户端fin, 被动关闭, 发送ack置状态为close_wait, 等待last ack.
-				if (flags.flag.fin)
-				{
-					m_tsm.state_ = tcp_state::ts_close_wait;
-				}
-
-				// 连接状态中, 只是一个ack包而已, 不用对ack包再ack.
-				if (payload_len == 0 && !flags.flag.fin)
-				{
-					return;
-				}
-			}
-			break;
-			case tcp_state::ts_fin_wait_1:		// 表示主动关闭.
-			{
-				bool need_ack = false;
-
-				// 同时发出fin, 转为状态ts_time_wait, 回复ack, 关闭这个连接.
-				if (flags.flag.fin && flags.flag.ack)
-				{
-					LOG_DBG << m_endp << " tcp_state::ts_closed";
-					m_tsm.state_ = tcp_state::ts_closed;
-					// m_tsm.state_ = tcp_state::ts_time_wait;
-					need_ack = true;
-				}
-
-				// 主动与本地客户端断开, 表示已经向本地客户端发出了fin, 还未收到这个fin的ack.
-				if (!flags.flag.ack)
-				{
-					if (flags.flag.fin)	// 收到fin, 回复ack.
-					{
-						LOG_DBG << m_endp << " tcp_state::ts_closing";
-						m_tsm.state_ = tcp_state::ts_closing;
-						need_ack = true;
-					}
-					else
-					{
-						reset();
-						return;
-					}
-				}
-
-				if (!need_ack)
-				{
-					// 只是收到ack, 转为fin_wait_2, 等待本地客户端的fin.
-					LOG_DBG << m_endp << " tcp_state::ts_fin_wait_2";
-					m_tsm.state_ = tcp_state::ts_fin_wait_2;
-					return;
-				}
-			}
-			break;
-			case tcp_state::ts_fin_wait_2:
-			{
-				if (!flags.flag.fin)	// 只期望收到fin, 除非有数据, 否则都跳过.
-				{
-					if (payload_len <= 0)
-						return;
-				}
-
-				// 收到fin, 发回ack, 并关闭这个连接, 进入2MSL状态.
-				if (flags.flag.fin)
-				{
-					LOG_DBG << m_endp << " tcp_state::ts_closed";
-					m_tsm.state_ = tcp_state::ts_closed;
-					// m_tsm.state_ = tcp_state::ts_time_wait;
-				}
-			}
-			break;
-			case tcp_state::ts_close_wait:
-			{
-				// 对方主动关闭.
-				// 等待自己发出fin给本地, 这时收到的ack, 只是最后部分半开状态的向
-				// 本地发出数据, 本地回复的ack而已, 所以在这里, 只需要简单的跳过.
-				if (flags.flag.ack)
-					return;
-
-				// 统统跳过, 在自己发没出fin之前, 所有除对数据的ack之外, 全是错误的
-				// 数据, 这里可以直接rst掉这个连接.
-				reset();
-				return;
-			}
-			break;
-			case tcp_state::ts_last_ack:
-			case tcp_state::ts_closing:
-			{
-				if (!flags.flag.ack)
-				{
-					return;
-				}
-
-				// 如果是close_wait, 则表示收到是last ack, 关闭这个连接.
-				// 如果是closing, 则表示收到的是fin的ack, 进入2MSL状态.
-				LOG_DBG << m_endp << " tcp_state::ts_closed";
-				m_tsm.state_ = tcp_state::ts_closed;
-				// m_tsm.state_ = tcp_state::ts_time_wait;
-				return;
-			}
-			break;
-			}
-
-			// save tcp payload.
-			if (payload_len > 0 && !keep_alive)
-			{
-				auto payload = buf + 20 + offset;
-				auto target = boost::asio::buffer_cast<void*>(
-					m_tcp_recv_buffer.prepare(payload_len));
-				std::memcpy(target, payload, payload_len);
-				m_tcp_recv_buffer.commit(payload_len);
-			}
-
-			int ack = m_tsm.seq_ + payload_len;
-			if (payload_len == 0)
-				ack += 1;
-
-			// 回写ack.
-			ip_buffer buffer(40);
-			auto ip = buffer.data();
-			auto tcp = ip + 20;
-			auto& rsv = m_endp_reserve;;
-
-			rsv.type_ = type;
-
-			flags.data = 0;
-			flags.flag.ack = 1;
-
-			m_tsm.lack_ = ack;
-
-			make_tcp_header(tcp, 20, rsv, m_tsm.lseq_, m_tsm.lack_, flags.data);
-
-			// 回调写回ack数据.
-			m_callback_func(rsv, buffer);
-		}
-
-		// 发送数据.
-		int write(const uint8_t* payload, int payload_len)
-		{
-			if (m_tsm.state_ == tcp_state::ts_invalid ||
-				m_tsm.state_ == tcp_state::ts_closed)
-				return -1;
-
-			// 计算ip包大小.
-			auto iplen = 20 + 20 + payload_len;
-
-			// 回写ack.
-			ip_buffer buffer(iplen);
-			auto ip = buffer.data();
-			auto tcp = ip + 20;
-			auto& rsv = m_endp_reserve;;
-
-			rsv.type_ = ip_tcp;
-
-			tcp_flags flags;
-			flags.data = 0;
-			flags.flag.ack = 1;
-
-			// 复制数据到payload位置.
-			std::memcpy(tcp + 20, payload, payload_len);
-
-			make_tcp_header(tcp, 20 + payload_len, rsv, m_tsm.lseq_, m_tsm.lack_, flags.data);
-
-			// 增加本地seq.
-			m_tsm.lseq_ += payload_len;
-
-			// 回调写回ack数据.
-			m_callback_func(rsv, buffer);
-
-			return payload_len;
-		}
-
-		int read(uint8_t* buf, int len)
-		{
-			len = std::min<int>(len, (int)m_tcp_recv_buffer.size());
-			auto bytes = m_tcp_recv_buffer.sgetn((char*)buf, len);
-			if ((m_tsm.state_ == tcp_state::ts_invalid ||
-				m_tsm.state_ == tcp_state::ts_closed) && bytes == 0)
-				return -1;
-			return len;
-		}
-
-		void close()
-		{
-			if (m_abort)
-				return;
-
-			m_abort = true;
-
-			// 已经关闭了, 不再响应close.
-			if (m_tsm.state_ == tcp_state::ts_closed ||
-				m_tsm.state_ == tcp_state::ts_invalid)
-			{
-				return;
-			}
-
-			bool rst = false;
-
-			// 连接状态, 主动关闭连接, 发送fin给本地, 并进入fin_wait1状态.
-			if (m_tsm.state_ == tcp_state::ts_established)
-			{
-				LOG_DBG << m_endp << " tcp_state::ts_fin_wait_1";
-				m_tsm.state_ = tcp_state::ts_fin_wait_1;
-			}
-			else if (m_tsm.state_ == tcp_state::ts_close_wait)
-			{
-				// 已经收到fin, 发送fin给本地, 并进入ts_last_ack状态.
-				LOG_DBG << m_endp << " tcp_state::ts_last_ack";
-				m_tsm.state_ = tcp_state::ts_last_ack;
-			}
-			else
-			{
-				LOG_DBG << m_endp << " rst & tcp_state::ts_closed";
-				m_tsm.state_ = tcp_state::ts_closed;
-				rst = true;
-			}
-
-			ip_buffer buffer(40);
-			auto ip = buffer.data();
-			auto tcp = ip + 20;
-			auto& rsv = m_endp_reserve;
-
-			rsv.type_ = ip_tcp;
-
-			tcp_flags flags;
-			flags.data = 0;
-
-			if (rst)
-				flags.flag.rst = 1;
-			else
-				flags.flag.fin = 1;
-			flags.flag.ack = 1;
-			make_tcp_header(tcp, 20, rsv, m_tsm.lseq_, m_tsm.lack_, flags.data);
-
-			// 回复ack之后本地seq加1
-			m_tsm.lseq_ += 1;
-
-			// 回调写回数据.
-			m_callback_func(rsv, buffer);
-		}
-
-		void reset()
-		{
-			ip_buffer buffer(40);
-			auto ip = buffer.data();
-			auto tcp = ip + 20;
-			auto& rsv = m_endp_reserve;
-
-			rsv.type_ = ip_tcp;
-
-			tcp_flags flags;
-			flags.data = 0;
-
-			flags.flag.ack = 1;
-			flags.flag.rst = 1;
-			make_tcp_header(tcp, 20, rsv, m_tsm.lseq_, m_tsm.lack_, flags.data);
-
-			// 回复ack之后本地seq加1
-			m_tsm.lseq_ += 1;
-
-			// 状态置为关闭.
-			LOG_DBG << m_endp << " rst tcp_state::ts_closed";
-			m_tsm.state_ = tcp_state::ts_closed;
-
-			// 回调写回数据.
-			m_callback_func(rsv, buffer);
-		}
-
-		endpoint_pair tcp_endpoint_pair() const
-		{
-			return m_endp;
-		}
-
-		// 返回当前窗口大小.
-		int window_size()
-		{
-			return m_tsm.win_;
-		}
-
-	public:
-		boost::asio::io_context& m_io_context;
-		endpoint_pair m_endp;
-		endpoint_pair m_endp_reserve;
-		write_ip_packet_func m_callback_func;
-		accept_handler m_accept_handler;
-		boost::asio::streambuf m_tcp_recv_buffer;
-		bool m_accepted;
-		tsm m_tsm;
-		bool m_abort;
-	};
 
 	// 分析ip流, 根据ip流的 endpoint_pair
 	// 转发到对应的tcp流模块.
@@ -739,7 +51,7 @@ namespace avpncore {
 		// 开始工作.
 		void start()
 		{
- 			m_io_context.post(boost::bind(
+ 			m_io_context.post(std::bind(
  				&avpn_acceptor::start_work, shared_from_this()));
 		}
 
@@ -783,8 +95,8 @@ namespace avpncore {
 						{
 							auto& back = m_accept_list.back();
 							demuxer = back.stream_;
-							auto ip_callback = boost::bind(&avpn_acceptor::ip_packet,
-								shared_from_this(), _1, _2);
+							auto ip_callback = std::bind(&avpn_acceptor::ip_packet,
+								shared_from_this(), std::placeholders::_1, std::placeholders::_2);
 							demuxer->set_handlers(
 								ip_callback, back.handler_);
 							m_accept_list.pop_back();
@@ -832,8 +144,8 @@ namespace avpncore {
 
 			if (!write_in_progress)
 			{
-				boost::asio::spawn(m_io_context,
-					boost::bind(&avpn_acceptor::write_ip_packet, shared_from_this(), _1));
+				boost::asio::spawn(m_io_context, std::bind(
+					&avpn_acceptor::write_ip_packet, shared_from_this(), std::placeholders::_1));
 			}
 		}
 
@@ -982,7 +294,8 @@ namespace avpncore {
 			for (auto i = 0; i < 40; i++)
 			{
 				tcp_stream* ts = new tcp_stream(m_io_context);
-				m_avpn_acceptor->async_accept(ts, boost::bind(&tun2socks::accept_handle, this, ts, _1));
+				m_avpn_acceptor->async_accept(ts,
+					std::bind(&tun2socks::accept_handle, this, ts, std::placeholders::_1));
 			}
 
 			m_socks_server = socks_server;
@@ -993,7 +306,8 @@ namespace avpncore {
 		void accept_handle(tcp_stream* ts, const boost::system::error_code& ec)
 		{
 			tcp_stream* new_ts = new tcp_stream(m_io_context);
-			m_avpn_acceptor->async_accept(new_ts, boost::bind(&tun2socks::accept_handle, this, new_ts, _1));
+			m_avpn_acceptor->async_accept(new_ts,
+				std::bind(&tun2socks::accept_handle, this, new_ts, std::placeholders::_1));
 
 			boost::asio::spawn(m_io_context,
 			[this, ts]
@@ -1151,7 +465,7 @@ namespace avpncore {
 	private:
 		boost::asio::io_context& m_io_context;
 		tuntap& m_dev;
-		boost::shared_ptr<avpn_acceptor> m_avpn_acceptor;
+		boost::local_shared_ptr<avpn_acceptor> m_avpn_acceptor;
 		std::string m_socks_server;
 	};
 

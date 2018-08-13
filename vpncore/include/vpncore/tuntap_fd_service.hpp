@@ -1,10 +1,4 @@
 ﻿#pragma once
-#include "boost/asio.hpp"
-#include "boost/thread.hpp"
-#include "boost/bind.hpp"
-#include "boost/smart_ptr/scoped_ptr.hpp"
-#include "boost/smart_ptr/local_shared_ptr.hpp"
-#include "boost/smart_ptr/make_local_shared.hpp"
 
 #include <iostream>
 #include <string>
@@ -61,6 +55,13 @@ static const char			drv_name[] = "tun";
 #include <net/if_tap.h>
 
 #endif
+
+#include "boost/asio/io_context.hpp"
+#include "boost/thread.hpp"
+#include "boost/bind.hpp"
+#include "boost/smart_ptr/scoped_ptr.hpp"
+#include "boost/smart_ptr/local_shared_ptr.hpp"
+#include "boost/smart_ptr/make_local_shared.hpp"
 
 #include "vpncore/logging.hpp"
 #include "vpncore/tuntap_config.hpp"

@@ -1,21 +1,16 @@
 ﻿#pragma once
-#include <string>
-#include <vector>
-#include <memory>
-
-#include "boost/asio.hpp"
 
 #if defined(AVPN_WINDOWS)
-#include "tuntap_windows_service.hpp"
+#include "vpncore/tuntap_windows_service.hpp"
 #elif defined(AVPN_LINUX)
-#include "tuntap_fd_service.hpp"
+#include "vpncore/tuntap_fd_service.hpp"
 #else
 #error unsupported platform
 #endif
 
 
 
-#include "basic_tuntap.hpp"
+#include "vpncore/basic_tuntap.hpp"
 
 namespace tuntap_service {
 

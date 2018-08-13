@@ -11,21 +11,16 @@
 #include <io.h>
 #endif
 
-#include <deque>
 #include <cstring> // for std::memcpy
 
-#include <boost/logic/tribool.hpp>
-#include <boost/bind.hpp>
 #include <boost/enable_shared_from_this.hpp>
-#include <boost/array.hpp>
-#include <boost/date_time.hpp>
-#include <boost/date_time/posix_time/posix_time.hpp>
 
 #include <boost/system/system_error.hpp>
 #include <boost/system/error_code.hpp>
 
-#include <boost/asio.hpp>
 #include <boost/asio/spawn.hpp>
+#include <boost/asio/io_context.hpp>
+#include <boost/asio/ip/tcp.hpp>
 
 #include "vpncore/io.hpp"
 #include "vpncore/logging.hpp"

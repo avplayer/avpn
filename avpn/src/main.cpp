@@ -1,13 +1,5 @@
 ﻿#include <iostream>
-#include <iterator>
-#include <algorithm>
-#include <cstdlib>
-#include <functional>
-#include <memory>
 #include <string>
-#include <thread>
-#include <vector>
-#include <deque>
 
 #ifdef __linux__
 #  include <sys/resource.h>
@@ -18,12 +10,7 @@
 #  include <Windows.h>
 #endif
 
-// #include <boost/asio.hpp>
-#include <boost/thread.hpp>
-#include <boost/array.hpp>
-#include <boost/endian/arithmetic.hpp>
-#include <boost/program_options.hpp>
-namespace po = boost::program_options;
+#include <boost/asio/io_context.hpp>
 
 #include "vpncore/logging.hpp"
 #include "vpncore/socks_client.hpp"
@@ -32,15 +19,6 @@ namespace po = boost::program_options;
 
 using namespace tuntap_service;
 using namespace avpncore;
-
-using namespace boost::asio;
-
-#ifdef AVPN_WINDOWS
-namespace win = boost::asio::windows;
-#endif
-
-using tcp = boost::asio::ip::tcp;
-using udp = boost::asio::ip::udp;
 
 
 int platform_init()
@@ -96,7 +74,7 @@ int main(int argc, char** argv)
 	platform_init();
 	init_logging(false);
 
-	io_context io;
+	boost::asio::io_context io;
 
 	dev_config cfg = { "10.0.0.1", "255.255.255.0", "10.0.0.0" };
 	// dev_config cfg = { "0.0.0.0", "255.255.255.255", "0.0.0.0" };
@@ -116,8 +94,6 @@ int main(int argc, char** argv)
 			break;
 		}
 	}
-
-	streambuf read_buf;
 
 #ifdef AVPN_LINUX
 	cfg.dev_name_ = "";
