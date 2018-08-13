@@ -5,21 +5,24 @@
 
 #include "boost/asio.hpp"
 
-#ifdef AVPN_WINDOWS
+#if defined(AVPN_WINDOWS)
 #include "tuntap_windows_service.hpp"
-#else
+#elif defined(AVPN_LINUX)
 #include "tuntap_fd_service.hpp"
+#else
+#error unsupported platform
 #endif
+
 
 
 #include "basic_tuntap.hpp"
 
 namespace tuntap_service {
 
-	// 定义tuntap实现.
-#ifdef AVPN_WINDOWS
+	// 定义不同平台的tuntap实现.
+#if defined(AVPN_WINDOWS)
 	typedef basic_tuntap<tuntap_windows_service> tuntap;
-#else
+#elif defined(AVPN_LINUX)
 	typedef basic_tuntap<tuntap_fd_service> tuntap;
 #endif
 
