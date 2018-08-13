@@ -90,46 +90,6 @@ int platform_init()
 	return 0;
 }
 
-
-// app -> tap -> lwip -> socks
-// socks -> lwip -> tap -> app
-
-using buffer_queue = std::deque<struct pbuf*>;
-
-std::atomic_int client_count(0);
-
-bool connect_socks(boost::asio::yield_context yield, boost::asio::ip::tcp::socket& sock,
-	const std::string& socks_uri, socks::socks_address& socks_addr)
-{
-	using namespace socks;
-
-	bool ret = parse_url(socks_uri, socks_addr);
-	if (!ret)
-	{
-		return false;
-	}
-
-	// resolver socks uri.
-	tcp::resolver::query query(socks_addr.host, socks_addr.port);
-	tcp::resolver resolver(sock.get_io_context());
-	boost::system::error_code ec;
-
-	auto endp = resolver.async_resolve(query, yield[ec]);
-	if (ec)
-	{
-		return false;
-	}
-
-	// 先初始化一个socks client连接，并连接到socks server.
-	boost::asio::async_connect(sock, endp, yield[ec]);
-	if (ec)
-	{
-		return false;
-	}
-
-	return true;
-}
-
 int main(int argc, char** argv)
 {
 	platform_init();
