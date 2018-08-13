@@ -707,11 +707,11 @@ namespace socks {
 							<< ":" << m_remote_endp.port();
 						// 在这之后，保持这个tcp连接直到udp代理也不需要了.
 					}
-					else
-					{
-						LOG_DBG << "* SOCKS remote host: " << m_remote_endp.address().to_string()
-							<< ":" << m_remote_endp.port();
-					}
+// 					else
+// 					{
+// 						LOG_DBG << "* SOCKS remote host: " << m_remote_endp.address().to_string()
+// 							<< ":" << m_remote_endp.port();
+// 					}
 
 					response.consume(len);
 					BOOST_ASSERT("response.size() == 0" && response.size() == 0);
