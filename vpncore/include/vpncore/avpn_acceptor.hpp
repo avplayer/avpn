@@ -82,9 +82,14 @@ namespace avpncore {
 
 		boost::local_shared_ptr<uint8_t> buf_;
 		int len_;
+		int type_; // same as ip_type
 	};
 
-
+	enum ip_type
+	{
+		ip_tcp = 0x06,
+		ip_udp = 0x11,
+	};
 
 
 	// 定义接收到tcp连接请求时的accept handler, 每个tcp连接收到
@@ -97,8 +102,6 @@ namespace avpncore {
 
 	class tcp_stream
 	{
-
-
 		enum tcp_state
 		{
 			ts_invalid = -1,
@@ -260,16 +263,16 @@ namespace avpncore {
 			uint8_t ihl = ((*(uint8_t*)(p)) & 0x0f) * 4;
 			uint16_t total = ntohs(*(uint16_t*)(p + 2));
 			uint8_t type = *(uint8_t*)(p + 9);
-			uint32_t src_ip = /*ntohl*/(*(uint32_t*)(p + 12));
-			uint32_t dst_ip = /*ntohl*/(*(uint32_t*)(p + 16));
+			uint32_t src_ip =(*(uint32_t*)(p + 12));
+			uint32_t dst_ip =(*(uint32_t*)(p + 16));
 
-			if (type != 6/* && type != 0x11*/) // only tcp
+			if (type != ip_tcp) // only tcp
 				return;
 
 			p = p + ihl;
 
-			uint16_t src_port = /*ntohs*/(*(uint16_t*)(p + 0));
-			uint16_t dst_port = /*ntohs*/(*(uint16_t*)(p + 2));
+			uint16_t src_port = (*(uint16_t*)(p + 0));
+			uint16_t dst_port = (*(uint16_t*)(p + 2));
 
 			if (m_endp.empty())
 			{
@@ -571,7 +574,7 @@ namespace avpncore {
 			auto tcp = ip + 20;
 			auto& rsv = m_endp_reserve;;
 
-			rsv.type_ = 6;
+			rsv.type_ = ip_tcp;
 
 			tcp_flags flags;
 			flags.data = 0;
@@ -641,7 +644,7 @@ namespace avpncore {
 			auto tcp = ip + 20;
 			auto& rsv = m_endp_reserve;
 
-			rsv.type_ = 6;
+			rsv.type_ = ip_tcp;
 
 			tcp_flags flags;
 			flags.data = 0;
@@ -667,7 +670,7 @@ namespace avpncore {
 			auto tcp = ip + 20;
 			auto& rsv = m_endp_reserve;
 
-			rsv.type_ = 6;
+			rsv.type_ = ip_tcp;
 
 			tcp_flags flags;
 			flags.data = 0;
@@ -849,15 +852,15 @@ namespace avpncore {
 			uint8_t ihl = ((*(uint8_t*)(buf)) & 0x0f) * 4;
 			uint16_t total = ntohs(*(uint16_t*)(buf + 2));
 			uint8_t type = *(uint8_t*)(buf + 9);
-			uint32_t src_ip = /*ntohl*/(*(uint32_t*)(buf + 12));
-			uint32_t dst_ip = /*ntohl*/(*(uint32_t*)(buf + 16));
+			uint32_t src_ip = (*(uint32_t*)(buf + 12));
+			uint32_t dst_ip = (*(uint32_t*)(buf + 16));
 
-			if (type == 6/* || type == 0x11*/)		// only tcp
+			if (type == ip_tcp)		// only tcp
 			{
 				auto p = buf + ihl;
 
-				uint16_t src_port = /*ntohs*/(*(uint16_t*)(p + 0));
-				uint16_t dst_port = /*ntohs*/(*(uint16_t*)(p + 2));
+				uint16_t src_port = (*(uint16_t*)(p + 0));
+				uint16_t dst_port = (*(uint16_t*)(p + 2));
 
 				endpoint_pair endp(src_ip, src_port, dst_ip, dst_port);
 				endp.type_ = type;
