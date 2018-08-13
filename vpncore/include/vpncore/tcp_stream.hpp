@@ -140,7 +140,7 @@ namespace avpncore {
 
 		~tcp_stream()
 		{
-			LOG_DBG << "!!! tcp_stream quit, " << m_endp << ", leak data: " << m_tcp_recv_buffer.size();
+			LOG_DBG << m_endp << " tcp_stream quit!!! leak data: " << m_tcp_recv_buffer.size();
 		}
 
 		// 设置各handler.
@@ -322,12 +322,9 @@ namespace avpncore {
 			// 收到rst强制中断.
 			if (flags.flag.rst)
 			{
-				if (m_tsm.state_ != tcp_state::ts_invalid)
-				{
-					m_tsm.state_ = tcp_state::ts_closed;
-					do_close();
-				}
-				LOG_DBG << m_endp << " recv flags.flag.rst, ls: " << tcp_state_string(last_state);
+				m_tsm.state_ = tcp_state::ts_closed;
+				do_close();
+				LOG_DBG << m_endp << " " << tcp_state_string(last_state) << " -> flags.flag.rst";
 				return;
 			}
 
@@ -335,7 +332,7 @@ namespace avpncore {
 			// tcp keep alive, only ack.
 			if (m_tsm.state_ == tcp_state::ts_established && seq == m_tsm.seq_ - 1)
 			{
-				LOG_DBG << m_endp << " tcp keep alive, skip it";
+				LOG_DBG << m_endp << " " << tcp_state_string(last_state) << " tcp keep alive, skip it";
 				keep_alive = true;
 				return;
 			}
@@ -350,8 +347,8 @@ namespace avpncore {
 			case tcp_state::ts_closed:
 			{
 				// 关闭了还发数据过来, rst响应之.
-				LOG_DBG << m_endp << " ts_listen/ts_time_wait/ts_closed, ls: "
-					<< tcp_state_string(last_state);
+				LOG_DBG << m_endp << " " << tcp_state_string(last_state) << " -> "
+					<< tcp_state_string(m_tsm.state_) << " case ts_listen/ts_time_wait/ts_closed";
 				reset();
 				return;
 			}
@@ -362,7 +359,7 @@ namespace avpncore {
 					return;
 
 				m_tsm.state_ = tcp_state::ts_syn_rcvd;	// 更新状态为syn接收到的状态.
-				LOG_DBG << m_endp << " tcp_state::ts_syn_rcvd, ls: " << tcp_state_string(last_state);
+				LOG_DBG << m_endp << " " << tcp_state_string(last_state)  << " -> tcp_state::ts_syn_rcvd";
 
 				// 通知用户层接收到连接.
 				boost::system::error_code ec;
@@ -379,7 +376,7 @@ namespace avpncore {
 				}
 
 				m_tsm.state_ = tcp_state::ts_syn_rcvd;	// 更新状态为syn接收到的状态.
-				LOG_DBG << m_endp << " retransmission tcp_state::ts_syn_rcvd, ls: " << tcp_state_string(last_state);
+				LOG_DBG << m_endp << " " << tcp_state_string(last_state) << " -> retransmission tcp_state::ts_syn_rcvd";
 				return;
 			}
 			break;
@@ -395,7 +392,7 @@ namespace avpncore {
 				else
 				{
 					m_tsm.state_ = tcp_state::ts_established;	// 连接建立.
-					LOG_DBG << m_endp << " tcp_state::ts_established, ls: " << tcp_state_string(last_state);
+					LOG_DBG << m_endp << " " << tcp_state_string(last_state) << " -> tcp_state::ts_established";
 				}
 			}
 			case tcp_state::ts_established:
@@ -404,7 +401,7 @@ namespace avpncore {
 				if (flags.flag.fin)
 				{
 					m_tsm.state_ = tcp_state::ts_close_wait;
-					LOG_DBG << m_endp << " tcp_state::ts_close_wait, ls: " << tcp_state_string(last_state);
+					LOG_DBG << m_endp << " " << tcp_state_string(last_state) << " -> tcp_state::ts_close_wait";
 				}
 
 				// 连接状态中, 只是一个ack包而已, 不用对ack包再ack.
@@ -421,7 +418,7 @@ namespace avpncore {
 				// 同时发出fin, 转为状态ts_time_wait, 回复ack, 关闭这个连接.
 				if (flags.flag.fin && flags.flag.ack)
 				{
-					LOG_DBG << m_endp << " tcp_state::ts_closed, ls: " << tcp_state_string(last_state);
+					LOG_DBG << m_endp << " " << tcp_state_string(last_state) << " -> tcp_state::ts_closed";
 					m_tsm.state_ = tcp_state::ts_closed;
 					do_close();
 					// m_tsm.state_ = tcp_state::ts_time_wait;
@@ -433,7 +430,7 @@ namespace avpncore {
 				{
 					if (flags.flag.fin)	// 收到fin, 回复ack.
 					{
-						LOG_DBG << m_endp << " tcp_state::ts_closing, ls: " << tcp_state_string(last_state);
+						LOG_DBG << m_endp << " " << tcp_state_string(last_state)  << " -> tcp_state::ts_closing";
 						m_tsm.state_ = tcp_state::ts_closing;
 						do_close();
 						need_ack = true;
@@ -448,7 +445,7 @@ namespace avpncore {
 				if (!need_ack)
 				{
 					// 只是收到ack, 转为fin_wait_2, 等待本地客户端的fin.
-					LOG_DBG << m_endp << " tcp_state::ts_fin_wait_2, ls: " << tcp_state_string(last_state);
+					LOG_DBG << m_endp << " " << tcp_state_string(last_state) << " -> tcp_state::ts_fin_wait_2";
 					m_tsm.state_ = tcp_state::ts_fin_wait_2;
 					return;
 				}
@@ -465,7 +462,7 @@ namespace avpncore {
 				// 收到fin, 发回ack, 并关闭这个连接, 进入2MSL状态.
 				if (flags.flag.fin)
 				{
-					LOG_DBG << m_endp << " tcp_state::ts_closed, ls: " << tcp_state_string(last_state);
+					LOG_DBG << m_endp << " " << tcp_state_string(last_state) << " -> tcp_state::ts_closed";
 					m_tsm.state_ = tcp_state::ts_closed;
 					do_close();
 					// m_tsm.state_ = tcp_state::ts_time_wait;
@@ -496,7 +493,7 @@ namespace avpncore {
 
 				// 如果是close_wait, 则表示收到是last ack, 关闭这个连接.
 				// 如果是closing, 则表示收到的是fin的ack, 进入2MSL状态.
-				LOG_DBG << m_endp << " tcp_state::ts_closed, ls: " << tcp_state_string(last_state);
+				LOG_DBG << m_endp << " " << tcp_state_string(last_state) << " -> tcp_state::ts_closed";
 				m_tsm.state_ = tcp_state::ts_closed;
 				do_close();
 				// m_tsm.state_ = tcp_state::ts_time_wait;
@@ -579,7 +576,11 @@ namespace avpncore {
 			len = std::min<int>(len, (int)m_tcp_recv_buffer.size());
 			auto bytes = m_tcp_recv_buffer.sgetn((char*)buf, len);
 			if ((m_tsm.state_ == tcp_state::ts_invalid ||
-				m_tsm.state_ == tcp_state::ts_closed) && bytes == 0)
+				m_tsm.state_ == tcp_state::ts_closed ||
+				m_tsm.state_ == tcp_state::ts_close_wait ||
+				m_tsm.state_ == tcp_state::ts_closing ||
+				m_tsm.state_ == tcp_state::ts_last_ack
+				) && bytes == 0)
 				return -1;
 			return len;
 		}
@@ -602,18 +603,18 @@ namespace avpncore {
 			// 连接状态, 主动关闭连接, 发送fin给本地, 并进入fin_wait1状态.
 			if (m_tsm.state_ == tcp_state::ts_established)
 			{
-				LOG_DBG << m_endp << " tcp_state::ts_fin_wait_1";
+				LOG_DBG << m_endp << " " << tcp_state_string(m_tsm.state_) << " -> tcp_state::ts_fin_wait_1";
 				m_tsm.state_ = tcp_state::ts_fin_wait_1;
 			}
 			else if (m_tsm.state_ == tcp_state::ts_close_wait)
 			{
 				// 已经收到fin, 发送fin给本地, 并进入ts_last_ack状态.
-				LOG_DBG << m_endp << " tcp_state::ts_last_ack";
+				LOG_DBG << m_endp << " " << tcp_state_string(m_tsm.state_) << " -> tcp_state::ts_last_ack";
 				m_tsm.state_ = tcp_state::ts_last_ack;
 			}
 			else
 			{
-				LOG_DBG << m_endp << " rst & tcp_state::ts_closed";
+				LOG_DBG << m_endp << " " << tcp_state_string(m_tsm.state_) << " -> rst & tcp_state::ts_closed";
 				m_tsm.state_ = tcp_state::ts_closed;
 				do_close();
 				rst = true;
@@ -663,7 +664,7 @@ namespace avpncore {
 			m_tsm.lseq_ += 1;
 
 			// 状态置为关闭.
-			LOG_DBG << m_endp << " rst tcp_state::ts_closed";
+			LOG_DBG << m_endp << " " << tcp_state_string(m_tsm.state_) << " -> rst tcp_state::ts_closed";
 			m_tsm.state_ = tcp_state::ts_closed;
 
 			// 回调写回数据.
