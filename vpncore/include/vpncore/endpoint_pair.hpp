@@ -2,6 +2,10 @@
 #include <iostream>
 #include <boost/asio/ip/tcp.hpp>
 
+#include <fmt/ostream.h>
+#include <fmt/printf.h>
+#include <fmt/format.h>
+
 #include "vpncore/logging.hpp"
 
 namespace avpncore {
@@ -41,11 +45,13 @@ namespace avpncore {
 			dst_ = tmp;
 		}
 
-		std::string to_string()
+		std::string to_string() const
 		{
-			std::ostringstream oss;
-			oss << src_ << " - " << dst_;
-			return oss.str();
+			fmt::MemoryWriter out;
+			out << src_.address().to_string() << ":" << src_.port()
+				<< " - "
+				<< dst_.address().to_string() << ":" << dst_.port();
+			return out.str();
 		}
 	};
 
@@ -93,7 +99,7 @@ namespace std
 	{
 		typedef boost::asio::ip::tcp::endpoint argument_type;
 		typedef std::size_t result_type;
-		result_type operator()(argument_type const& s) const
+		inline result_type operator()(argument_type const& s) const
 		{
 			std::string temp = s.address().to_string();
 			std::size_t seed = 0;
@@ -107,7 +113,7 @@ namespace std
 	{
 		typedef avpncore::endpoint_pair argument_type;
 		typedef std::size_t result_type;
-		result_type operator()(argument_type const& s) const
+		inline result_type operator()(argument_type const& s) const
 		{
 			result_type const h1(std::hash<boost::asio::ip::tcp::endpoint>{}(s.src_));
 			result_type const h2(std::hash<boost::asio::ip::tcp::endpoint>{}(s.dst_));
@@ -120,15 +126,28 @@ namespace std
 }
 
 namespace logging {
-	logger& operator<<(logger& log, const boost::asio::ip::tcp::endpoint& endp)
+
+	inline logger& operator<<(logger& log, const boost::asio::ip::tcp::endpoint& endp)
 	{
 		log << endp.address().to_string() << ":" << endp.port();
 		return log;
 	}
 
-	logger& operator<<(logger& log, const avpncore::endpoint_pair& endp)
+	inline logger& operator<<(logger& log, const avpncore::endpoint_pair& endp)
 	{
-		log << endp.src_ << " - " << endp.dst_;
+		log << endp.to_string();
+		return log;
+	}
+
+	inline logger& operator<<(logger&& log, const boost::asio::ip::tcp::endpoint& endp)
+	{
+		log << endp.address().to_string() << ":" << endp.port();
+		return log;
+	}
+
+	inline logger& operator<<(logger&& log, const avpncore::endpoint_pair& endp)
+	{
+		log << endp.to_string();
 		return log;
 	}
 }
