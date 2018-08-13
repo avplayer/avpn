@@ -173,7 +173,11 @@ namespace avpncore {
 		void accept(accept_state state)
 		{
 			if (m_accepted)
+			{
+				do_close();
 				return;
+			}
+
 			m_accepted = true;
 
 			ip_buffer buffer(40);
