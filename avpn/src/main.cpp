@@ -25,6 +25,7 @@
 #include <boost/program_options.hpp>
 namespace po = boost::program_options;
 
+#include "vpncore/logging.hpp"
 #include "vpncore/socks_client.hpp"
 #include "vpncore/tuntap.hpp"
 #include "vpncore/avpn_acceptor.hpp"

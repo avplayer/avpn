@@ -144,6 +144,17 @@ add_definitions(-DBOOST_COROUTINES_NO_DEPRECATION_WARNING)
 add_subdirectory(third_party/boost)
 include_directories(${BOOST_INCLUDE_DIRS})
 
+add_subdirectory(third_party/zlib EXCLUDE_FROM_ALL)
+set(ZLIB_LIBRARIES zlib)
+set(ZLIB_INCLUDE_DIRS ${CMAKE_CURRENT_SOURCE_DIR}/third_party/zlib)
+link_libraries(${ZLIB_LIBRARIES})
+
+add_subdirectory(third_party/fmt)
+set(LIBFMT_INCLUDE_DIRS ${CMAKE_CURRENT_SOURCE_DIR}/third_party/fmt)
+include_directories(${LIBFMT_INCLUDE_DIRS})
+set(LIBFMT_LIBRARIES fmt)
+link_libraries(${LIBFMT_LIBRARIES})
+
 add_subdirectory(vpncore)
 
 include_directories(
