@@ -214,7 +214,10 @@ namespace avpncore {
 					auto p = boost::asio::buffer_cast<const void*>(buffer.data());
 					auto ret = ts->write((uint8_t*)p, bytes);
 					if (ret < 0)
+					{
+						socks.shutdown(boost::asio::ip::tcp::socket::shutdown_send, ec);
 						break;
+					}
 					buffer.consume(ret);
 				}
 
@@ -238,7 +241,10 @@ namespace avpncore {
 					auto b = boost::asio::buffer_cast<uint8_t*>(buffer.prepare(1024));
 					int len = ts->read(b, 1024);
 					if (len < 0)
+					{
+						socks.shutdown(boost::asio::ip::tcp::socket::shutdown_receive, ec);
 						break;
+					}
 
 					if (len == 0)
 					{
