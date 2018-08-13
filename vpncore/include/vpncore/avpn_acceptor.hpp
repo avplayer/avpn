@@ -60,13 +60,14 @@ namespace avpncore {
 			m_abort = true;
 		}
 
-		// async_accept
-		void async_accept(tcp_stream* stream, accept_handler handle)
+		void async_accept(tcp_stream* stream)
 		{
-			back_accept item;
-			item.stream_ = stream;
-			item.handler_ = handle;
-			m_accept_list.push_back(item);
+			m_accept_list.push_back(stream);
+		}
+
+		void remove_stream(const endpoint_pair& pair)
+		{
+			m_demultiplexer.erase(pair);
 		}
 
 	protected:
@@ -93,13 +94,11 @@ namespace avpncore {
 					{
 						if (!m_accept_list.empty())
 						{
-							auto& back = m_accept_list.back();
-							demuxer = back.stream_;
-							auto ip_callback = std::bind(&avpn_acceptor::ip_packet,
-								shared_from_this(), std::placeholders::_1, std::placeholders::_2);
-							demuxer->set_handlers(
-								ip_callback, back.handler_);
+							demuxer = m_accept_list.back();
 							m_accept_list.pop_back();
+							demuxer->set_write_ip_handler(
+								std::bind(&avpn_acceptor::ip_packet, shared_from_this(),
+									std::placeholders::_1, std::placeholders::_2));
 							m_demultiplexer[endp] = demuxer;
 						}
 					}
@@ -155,11 +154,6 @@ namespace avpncore {
 			if (it == m_demultiplexer.end())
 				return nullptr;
 			return it->second;
-		}
-
-		void remove_stream(const endpoint_pair& pair)
-		{
-			m_demultiplexer.erase(pair);
 		}
 
 		endpoint_pair lookup_endpoint_pair(const uint8_t* buf, int len)
@@ -231,12 +225,7 @@ namespace avpncore {
 		boost::asio::io_context& m_io_context;
 		tuntap& m_input;
 		std::unordered_map<endpoint_pair, tcp_stream*> m_demultiplexer;
-		struct back_accept
-		{
-			tcp_stream* stream_;
-			accept_handler handler_;
-		};
-		std::vector<back_accept> m_accept_list;
+		std::vector<tcp_stream*> m_accept_list;
 		std::deque<ip_buffer> m_queue;
 		bool m_abort;
 	};

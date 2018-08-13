@@ -4,6 +4,7 @@
 #include <memory>
 #include <cinttypes>
 
+#include <boost/intrusive_ptr.hpp>
 #include <boost/smart_ptr/local_shared_ptr.hpp>
 #include <boost/smart_ptr/make_local_shared.hpp>
 
@@ -52,6 +53,8 @@ namespace avpncore {
 		return true;
 	}
 
+	typedef boost::intrusive_ptr<tcp_stream> tcp_stream_ptr;
+
 	class tun2socks
 	{
 	public:
@@ -62,6 +65,18 @@ namespace avpncore {
 		}
 
 	public:
+		tcp_stream* make_tcp_stream()
+		{
+			tcp_stream* ts = new tcp_stream(m_io_context);
+
+			ts->set_closed_handler(
+				std::bind(&tun2socks::close_handler, this, ts, std::placeholders::_1));
+			ts->set_accept_handler(
+				std::bind(&tun2socks::accept_handle, this, ts, std::placeholders::_1));
+
+			return ts;
+		}
+
 		bool start(const std::string& local, const std::string& mask,
 			const std::string& socks_server)
 		{
@@ -70,21 +85,24 @@ namespace avpncore {
 
 			for (auto i = 0; i < 40; i++)
 			{
-				tcp_stream* ts = new tcp_stream(m_io_context);
-				m_avpn_acceptor->async_accept(ts,
-					std::bind(&tun2socks::accept_handle, this, ts, std::placeholders::_1));
+				tcp_stream* ts = make_tcp_stream();
+				m_tcp_streams[ts] = ts->self();
+				m_avpn_acceptor->async_accept(ts);
 			}
 
 			m_socks_server = socks_server;
 			m_avpn_acceptor->start();
+
+			// 同时启动定时器.
+			start_timer();
 			return true;
 		}
 
 		void accept_handle(tcp_stream* ts, const boost::system::error_code& ec)
 		{
-			tcp_stream* new_ts = new tcp_stream(m_io_context);
-			m_avpn_acceptor->async_accept(new_ts,
-				std::bind(&tun2socks::accept_handle, this, new_ts, std::placeholders::_1));
+			tcp_stream* new_ts = make_tcp_stream();
+			m_tcp_streams[ts] = ts->self();
+			m_avpn_acceptor->async_accept(ts);
 
 			boost::asio::spawn(m_io_context,
 			[this, ts]
@@ -142,6 +160,13 @@ namespace avpncore {
 					run(socks_ptr, ts);
 				});
 			});
+		}
+
+		void close_handler(tcp_stream* ts, const boost::system::error_code& ec)
+		{
+			LOG_DBG << "tcp stream closed: " << ts->tcp_endpoint_pair();
+			m_avpn_acceptor->remove_stream(ts->tcp_endpoint_pair());
+			m_tcp_streams.erase(ts);
 		}
 
 	protected:
@@ -239,10 +264,31 @@ namespace avpncore {
 			});
 		}
 
+		void timer()
+		{
+			// check tcp stream status etc.
+			LOG_DBG << "current tcp stream: " << m_tcp_streams.size();
+		}
+
+		void start_timer()
+		{
+			m_timer.expires_from_now(std::chrono::seconds(1));
+			m_timer.async_wait([this](const boost::system::error_code& ec)
+			{
+				if (ec)
+					return;
+
+				start_timer();
+				timer();
+			});
+		}
+
 	private:
 		boost::asio::io_context& m_io_context;
 		tuntap& m_dev;
+		boost::asio::steady_timer m_timer{ m_io_context };
 		boost::local_shared_ptr<avpn_acceptor> m_avpn_acceptor;
+		std::unordered_map<tcp_stream*, tcp_stream_ptr> m_tcp_streams;
 		std::string m_socks_server;
 	};
 

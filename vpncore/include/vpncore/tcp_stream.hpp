@@ -7,6 +7,7 @@
 #include <boost/asio/streambuf.hpp>
 #include <boost/asio/spawn.hpp>
 
+#include "vpncore/intrusive_ptr_base.hpp"
 #include "vpncore/ip_buffer.hpp"
 #include "vpncore/endpoint_pair.hpp"
 #include "vpncore/logging.hpp"
@@ -21,7 +22,11 @@ namespace avpncore {
 	using accept_handler =
 		std::function<void(const boost::system::error_code&)>;
 
+	using closed_handler =
+		std::function<void(const boost::system::error_code&)>;
+
 	class tcp_stream
+		: public intrusive_ptr_base<tcp_stream>
 	{
 		enum tcp_state
 		{
@@ -117,10 +122,20 @@ namespace avpncore {
 			LOG_DBG << "!!! tcp_stream quit, " << m_endp;
 		}
 
-		void set_handlers(write_ip_packet_func cb, accept_handler ah)
+		// 设置各handler.
+		void set_accept_handler(accept_handler handler)
 		{
-			m_callback_func = cb;
-			m_accept_handler = ah;	// 如果是连接请求则回调.
+			m_accept_handler = handler;
+		}
+
+		void set_write_ip_handler(write_ip_packet_func handler)
+		{
+			m_write_ip_handler = handler;
+		}
+
+		void set_closed_handler(closed_handler handler)
+		{
+			m_closed_handler = handler;
 		}
 
 		// 当用户收到accept得到它的时候，
@@ -178,12 +193,14 @@ namespace avpncore {
 			m_tsm.state_ = tcp_state::ts_syn_sent;
 
 			// 回调写回数据.
-			m_callback_func(rsv, buffer);
+			m_write_ip_handler(rsv, buffer);
 		}
 
 		// 接收底层ip数据.
 		void output(const uint8_t* buf, int len)
 		{
+			auto keep_self = self();
+
 			const uint8_t* p = buf;
 
 			uint8_t ihl = ((*(uint8_t*)(p)) & 0x0f) * 4;
@@ -281,7 +298,10 @@ namespace avpncore {
 			if (flags.flag.rst)
 			{
 				if (m_tsm.state_ != tcp_state::ts_invalid)
+				{
 					m_tsm.state_ = tcp_state::ts_closed;
+					do_close();
+				}
 				LOG_DBG << m_endp << "recv flags.flag.rst";
 				return;
 			}
@@ -375,6 +395,7 @@ namespace avpncore {
 				{
 					LOG_DBG << m_endp << " tcp_state::ts_closed";
 					m_tsm.state_ = tcp_state::ts_closed;
+					do_close();
 					// m_tsm.state_ = tcp_state::ts_time_wait;
 					need_ack = true;
 				}
@@ -386,6 +407,7 @@ namespace avpncore {
 					{
 						LOG_DBG << m_endp << " tcp_state::ts_closing";
 						m_tsm.state_ = tcp_state::ts_closing;
+						do_close();
 						need_ack = true;
 					}
 					else
@@ -417,6 +439,7 @@ namespace avpncore {
 				{
 					LOG_DBG << m_endp << " tcp_state::ts_closed";
 					m_tsm.state_ = tcp_state::ts_closed;
+					do_close();
 					// m_tsm.state_ = tcp_state::ts_time_wait;
 				}
 			}
@@ -447,6 +470,7 @@ namespace avpncore {
 				// 如果是closing, 则表示收到的是fin的ack, 进入2MSL状态.
 				LOG_DBG << m_endp << " tcp_state::ts_closed";
 				m_tsm.state_ = tcp_state::ts_closed;
+				do_close();
 				// m_tsm.state_ = tcp_state::ts_time_wait;
 				return;
 			}
@@ -483,10 +507,10 @@ namespace avpncore {
 			make_tcp_header(tcp, 20, rsv, m_tsm.lseq_, m_tsm.lack_, flags.data);
 
 			// 回调写回ack数据.
-			m_callback_func(rsv, buffer);
+			m_write_ip_handler(rsv, buffer);
 		}
 
-		// 发送数据.
+		// 上层发送数据接口.
 		int write(const uint8_t* payload, int payload_len)
 		{
 			if (m_tsm.state_ == tcp_state::ts_invalid ||
@@ -517,7 +541,7 @@ namespace avpncore {
 			m_tsm.lseq_ += payload_len;
 
 			// 回调写回ack数据.
-			m_callback_func(rsv, buffer);
+			m_write_ip_handler(rsv, buffer);
 
 			return payload_len;
 		}
@@ -534,11 +558,6 @@ namespace avpncore {
 
 		void close()
 		{
-			if (m_abort)
-				return;
-
-			m_abort = true;
-
 			// 已经关闭了, 不再响应close.
 			if (m_tsm.state_ == tcp_state::ts_closed ||
 				m_tsm.state_ == tcp_state::ts_invalid)
@@ -564,6 +583,7 @@ namespace avpncore {
 			{
 				LOG_DBG << m_endp << " rst & tcp_state::ts_closed";
 				m_tsm.state_ = tcp_state::ts_closed;
+				do_close();
 				rst = true;
 			}
 
@@ -588,7 +608,7 @@ namespace avpncore {
 			m_tsm.lseq_ += 1;
 
 			// 回调写回数据.
-			m_callback_func(rsv, buffer);
+			m_write_ip_handler(rsv, buffer);
 		}
 
 		void reset()
@@ -615,7 +635,9 @@ namespace avpncore {
 			m_tsm.state_ = tcp_state::ts_closed;
 
 			// 回调写回数据.
-			m_callback_func(rsv, buffer);
+			m_write_ip_handler(rsv, buffer);
+
+			do_close();
 		}
 
 		endpoint_pair tcp_endpoint_pair() const
@@ -629,12 +651,23 @@ namespace avpncore {
 			return m_tsm.win_;
 		}
 
+		void do_close()
+		{
+			if (m_abort)
+				return;
+
+			m_abort = true;
+			boost::system::error_code ec;
+			m_closed_handler(ec);
+		}
+
 	public:
 		boost::asio::io_context& m_io_context;
 		endpoint_pair m_endp;
 		endpoint_pair m_endp_reserve;
-		write_ip_packet_func m_callback_func;
+		write_ip_packet_func m_write_ip_handler;
 		accept_handler m_accept_handler;
+		closed_handler m_closed_handler;
 		boost::asio::streambuf m_tcp_recv_buffer;
 		bool m_accepted;
 		tsm m_tsm;
