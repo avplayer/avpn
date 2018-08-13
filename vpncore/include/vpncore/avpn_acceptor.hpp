@@ -913,13 +913,15 @@ namespace avpncore {
 				return;
 			}
 
+			static uint16_t index = 0;
+
 			// 打包ip头.
 			uint8_t* p = buffer.first;
 
 			*((uint8_t*)(p + 0)) = 0x45; // version
 			*((uint8_t*)(p + 1)) = 0x00; // tos
 			*((uint16_t*)(p + 2)) = htons((uint16_t)buffer.second); // ip length
-			*((uint16_t*)(p + 4)) = htons(m_ip_index++);	// id
+			*((uint16_t*)(p + 4)) = htons(index++);	// id
 			*((uint16_t*)(p + 6)) = 0x00;	// flag
 			*((uint8_t*)(p + 8)) = 0x30; // ttl
 			*((uint8_t*)(p + 9)) = endp.type_; // protocol
@@ -1033,12 +1035,10 @@ namespace avpncore {
 		};
 		std::vector<back_accept> m_accept_list;
 		std::deque<buffer_pair> m_queue;
-		static int m_ip_index;
 		// 写入队列.
 		bool m_abort;
 	};
 
-	int avpn_acceptor::m_ip_index(0);
 
 
 	bool connect_socks(boost::asio::yield_context yield, boost::asio::ip::tcp::socket& sock,
