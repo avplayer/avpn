@@ -101,11 +101,13 @@ namespace avpncore {
 		void accept_handle(tcp_stream* ts, const boost::system::error_code& ec)
 		{
 			tcp_stream* new_ts = make_tcp_stream();
-			m_tcp_streams[ts] = ts->self();
-			m_avpn_acceptor->async_accept(ts);
+			m_tcp_streams[new_ts] = ts->self();
+			m_avpn_acceptor->async_accept(new_ts);
+
+			auto self = ts->self();
 
 			boost::asio::spawn(m_io_context,
-			[this, ts]
+			[this, ts, self]
 			(boost::asio::yield_context yield) mutable
 			{
 				using namespace socks;
@@ -141,7 +143,7 @@ namespace avpncore {
 
 				// 执行代理异步连接操作.
 				auto sc = boost::make_local_shared<socks::socks_client>(boost::ref(socks));
-				sc->async_do_proxy(socks_addr, [this, socks_ptr, local, ts, endp]
+				sc->async_do_proxy(socks_addr, [this, socks_ptr, local, ts, self, endp]
 				(const boost::system::error_code& err)
 				{
 					if (err)
@@ -172,7 +174,8 @@ namespace avpncore {
 	protected:
 		void run(boost::shared_ptr<boost::asio::ip::tcp::socket> socks_ptr, tcp_stream* ts)
 		{
-			boost::asio::spawn([this, ts, socks_ptr]
+			auto self = ts->self();
+			boost::asio::spawn([this, self, ts, socks_ptr]
 			(boost::asio::yield_context yield) mutable
 			{
 				boost::asio::streambuf buffer;
@@ -219,7 +222,7 @@ namespace avpncore {
 				LOG_DBG << ts->tcp_endpoint_pair() << " read socks total: " << total;
 			});
 
-			boost::asio::spawn([this, ts, socks_ptr]
+			boost::asio::spawn([this, self, ts, socks_ptr]
 			(boost::asio::yield_context yield) mutable
 			{
 				boost::asio::streambuf buffer;
