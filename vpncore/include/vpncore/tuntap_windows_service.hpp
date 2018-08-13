@@ -366,7 +366,7 @@ namespace tuntap_service {
 			if (cfg.dev_type_ == tuntap_service::dev_tun
 				&& version.major == 9 && version.minor < 8)
 			{
-				LOG_DBG << "WARNING:  Tap-Win32 driver version " << version.major << "." << version.minor
+				LOG_DBG << "WARNING:  Tap-Win32 driver version " << (int)version.major << "." << (int)version.minor
 					<< " does not support IPv6 in TUN mode. IPv6 will not work. Upgrade your Tap-Win32 driver.";
 			}
 
@@ -374,7 +374,7 @@ namespace tuntap_service {
 			if (cfg.dev_type_ == tuntap_service::dev_tun
 				&& version.major == 9 && version.minor == 8)
 			{
-				LOG_DBG << "ERROR:  Tap-Win32 driver version " << version.major << "." << version.minor
+				LOG_DBG << "ERROR:  Tap-Win32 driver version " << (int)version.major << "." << (int)version.minor
 					<< " is buggy regarding small IPv4 packets in TUN mode. Upgrade your Tap-Win32 driver.";
 			}
 
