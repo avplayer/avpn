@@ -54,7 +54,8 @@
 
 #endif // !TUNTAP_IOCTL_DEFINED
 
-#include "tuntap_config.hpp"
+#include "vpncore/tuntap_config.hpp"
+#include "vpncore/logging.hpp"
 
 namespace tuntap_service {
 
@@ -218,8 +219,9 @@ namespace tuntap_service {
 						tmp = net_cfg_instance_id;
 #endif
 						dev_map.insert(std::make_pair(tmp, ""));
-						std::cout << "component_id " << component_id
-							<< ", net_cfg_instance_id " << tmp << std::endl;
+
+						LOG_DBG << "component_id " << component_id
+							<< ", net_cfg_instance_id " << tmp;
 					}
 				}
 			}
@@ -288,7 +290,7 @@ namespace tuntap_service {
 					if (iter != dev_map.end())
 					{
 						iter->second.assign(dev_name);
-						std::cout << "Name " << dev_name << std::endl;
+						LOG_DBG << "Tuntap device name " << dev_name;
 					}
 				}
 			}
@@ -335,7 +337,7 @@ namespace tuntap_service {
 			TCHAR device_path[256] = { 0 };
 			_stprintf(device_path, TEXT("%s%s%s"),
 				USERMODEDEVICEDIR, cfg.guid_.c_str(), TAPSUFFIX);
-			std::cout << device_path << std::endl;
+			LOG_DBG << device_path;
 			auto handle = CreateFile((LPCTSTR)device_path, GENERIC_READ | GENERIC_WRITE,
 				0, 0, OPEN_EXISTING,
 				FILE_ATTRIBUTE_SYSTEM | FILE_FLAG_OVERLAPPED, 0);
@@ -364,16 +366,16 @@ namespace tuntap_service {
 			if (cfg.dev_type_ == tuntap_service::dev_tun
 				&& version.major == 9 && version.minor < 8)
 			{
-				std::cout << "WARNING:  Tap-Win32 driver version " << version.major << "." << version.minor
-					<< " does not support IPv6 in TUN mode. IPv6 will not work. Upgrade your Tap-Win32 driver.\n";
+				LOG_DBG << "WARNING:  Tap-Win32 driver version " << version.major << "." << version.minor
+					<< " does not support IPv6 in TUN mode. IPv6 will not work. Upgrade your Tap-Win32 driver.";
 			}
 
 			// tap driver 9.8 (2.2.0 and 2.2.1 release) is buggy
 			if (cfg.dev_type_ == tuntap_service::dev_tun
 				&& version.major == 9 && version.minor == 8)
 			{
-				std::cout << "ERROR:  Tap-Win32 driver version " << version.major << "." << version.minor
-					<< " is buggy regarding small IPv4 packets in TUN mode. Upgrade your Tap-Win32 driver.\n";
+				LOG_DBG << "ERROR:  Tap-Win32 driver version " << version.major << "." << version.minor
+					<< " is buggy regarding small IPv4 packets in TUN mode. Upgrade your Tap-Win32 driver.";
 			}
 
 			if (cfg.dev_type_ == tuntap_service::dev_tun)
@@ -397,8 +399,8 @@ namespace tuntap_service {
 					auto ep1 = boost::asio::ip::address_v4(htonl(tun_addrs[1]));
 					auto ep0 = boost::asio::ip::address_v4(htonl(tun_addrs[0]));
 					auto ep2 = boost::asio::ip::address_v4(htonl(tun_addrs[2]));
-					std::cout << "Set TAP-Windows TUN subnet mode network/local/netmask = " <<
-						ep1.to_string() << "/" << ep0.to_string() << "/" << ep2.to_string() << std::endl;
+					LOG_DBG << "Set TAP-Windows TUN subnet mode network/local/netmask = " <<
+						ep1.to_string() << "/" << ep0.to_string() << "/" << ep2.to_string();
 				}
 			}
 			else
@@ -415,7 +417,7 @@ namespace tuntap_service {
 				&mtu, sizeof(mtu),
 				&mtu, sizeof(mtu), &len, NULL))
 			{
-				std::cout << "TAP-Windows MTU=" << mtu << std::endl;
+				LOG_DBG << "TAP-Windows MTU=" << (int)mtu;
 			}
 
 			uint8_t mac[6];
@@ -480,7 +482,7 @@ namespace tuntap_service {
 			m_io_handle.assign(handle, ec);
 			if (ec)
 			{
-				std::cout << "Assign to random_access_handle: " << ec.message() << std::endl;
+				LOG_DBG << "Assign to random_access_handle: " << ec.message();
 			}
 
 			return true;

@@ -569,6 +569,10 @@ public:
 	{
 		return strcat_impl(v);
 	}
+	inline logger& operator<<(unsigned long v)
+	{
+		return strcat_impl(v);
+	}
 	inline logger& operator<<(long long v)
 	{
 		return strcat_impl(v);

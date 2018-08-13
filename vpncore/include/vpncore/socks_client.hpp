@@ -1,4 +1,4 @@
-#ifndef SOCKS_CLIENT_HPP
+ï»¿#ifndef SOCKS_CLIENT_HPP
 #define SOCKS_CLIENT_HPP
 
 #if defined(_MSC_VER) && (_MSC_VER >= 1200)
@@ -28,7 +28,7 @@
 #include <boost/asio/spawn.hpp>
 
 #include "vpncore/io.hpp"
-
+#include "vpncore/logging.hpp"
 
 namespace socks {
 
@@ -134,7 +134,7 @@ namespace socks {
 
 	//////////////////////////////////////////////////////////////////////////
 
-	// ½âÎöuri¸ñÊ½
+	// è§£æuriæ ¼å¼
 	// scheme:[//[user[:password]@]host[:port]][/path][?query][#fragment]
 
 	struct socks_address
@@ -148,18 +148,18 @@ namespace socks {
 		std::string username;
 		std::string password;
 
-		// proxy_addressÎª´úÀí·şÎñÆ÷Á¬½ÓµÄ¶ÔÏó,
-		// Èç¹ûÊÇip, proxy_hostnameÔòÓ¦¸ÃÎªfalse.
-		// Èç¹ûÊÇÓòÃû, proxy_hostnameÓ¦¸ÃÎªtrue.
+		// proxy_addressä¸ºä»£ç†æœåŠ¡å™¨è¿æ¥çš„å¯¹è±¡,
+		// å¦‚æœæ˜¯ip, proxy_hostnameåˆ™åº”è¯¥ä¸ºfalse.
+		// å¦‚æœæ˜¯åŸŸå, proxy_hostnameåº”è¯¥ä¸ºtrue.
 		std::string proxy_address;
 
-		// ´úÀí·şÎñÆ÷Á¬½ÓµÄÄ¿±ê¶Ë¿Ú.
+		// ä»£ç†æœåŠ¡å™¨è¿æ¥çš„ç›®æ ‡ç«¯å£.
 		std::string proxy_port;
 
-		// ¿ØÖÆ´úÀí·şÎñÆ÷ÊÇ·ñ½âÎöÓòÃû.
+		// æ§åˆ¶ä»£ç†æœåŠ¡å™¨æ˜¯å¦è§£æåŸŸå.
 		bool proxy_hostname;
 
-		// ´ò¿ªudp×ª·¢.
+		// æ‰“å¼€udpè½¬å‘.
 		bool udp_associate;
 	};
 
@@ -401,8 +401,8 @@ namespace socks {
 		};
 
 		enum {
-			MAX_RECV_BUFFER_SIZE = 768,	// ×î´óudp½ÓÊÕ»º³å´óĞ¡.
-			MAX_SEND_BUFFER_SIZE = 768	// ×î´óudp·¢ËÍ»º³å´óĞ¡.
+			MAX_RECV_BUFFER_SIZE = 768,	// æœ€å¤§udpæ¥æ”¶ç¼“å†²å¤§å°.
+			MAX_SEND_BUFFER_SIZE = 768	// æœ€å¤§udpå‘é€ç¼“å†²å¤§å°.
 		};
 
 	public:
@@ -457,7 +457,7 @@ namespace socks {
 			response.resize(len + 10);
 			char* wp = (char*)response.data();
 
-			// Ìí¼ÓÍ·ĞÅÏ¢.
+			// æ·»åŠ å¤´ä¿¡æ¯.
 			write_uint16(0, wp);	// RSV.
 			write_uint8(0, wp);		// FRAG.
 			write_uint8(1, wp);		// ATYP.
@@ -474,28 +474,28 @@ namespace socks {
 			if (len < 24)
 				return false;
 
-			// ²»ÊÇĞ­ÒéÖĞµÄÊı¾İ.
+			// ä¸æ˜¯åè®®ä¸­çš„æ•°æ®.
 			if (read_int16(p) != 0 || read_int8(p) != 0)
 				return false;
 
-			// Ô¶³ÌÖ÷»úIPÀàĞÍ.
+			// è¿œç¨‹ä¸»æœºIPç±»å‹.
 			boost::int8_t atyp = read_int8(p);
 			if (atyp != 0x01 && atyp != 0x04)
 				return false;
 
-			// Ä¿±êÖ÷»úIP.
+			// ç›®æ ‡ä¸»æœºIP.
 			boost::uint32_t ip = read_uint32(p);
 			if (ip == 0)
 				return false;
 			src.address(boost::asio::ip::address_v4(ip));
 
-			// ¶ÁÈ¡¶Ë¿ÚºÅ.
+			// è¯»å–ç«¯å£å·.
 			boost::uint16_t port = read_uint16(p);
 			if (port == 0)
 				return false;
 			src.port(port);
 
-			// ÕâÊ±µÄÖ¸ÕëpÊÇÖ¸ÏòÊı¾İÁË(2 + 1 + 1 + 4 + 2 = 10).
+			// è¿™æ—¶çš„æŒ‡é’ˆpæ˜¯æŒ‡å‘æ•°æ®äº†(2 + 1 + 1 + 4 + 2 = 10).
 			data = std::string((char*)p, len - 10);
 
 			return true;
@@ -551,7 +551,7 @@ namespace socks {
 				const char* p = boost::asio::buffer_cast<const char*>(b);
 				version = read_uint8(p);
 				method = read_uint8(p);
-				if (version != 5)	// °æ±¾²»µÈÓÚ5, ²»Ö§³Ösocks5.
+				if (version != 5)	// ç‰ˆæœ¬ä¸ç­‰äº5, ä¸æ”¯æŒsocks5.
 				{
 					ec = socks::errc::socks_unsupported_version;
 					handler(ec);
@@ -583,7 +583,7 @@ namespace socks {
 				request.commit(bytes_to_write);
 
 				int len = 0;
-				// ·¢ËÍÓÃ»§ÃÜÂëĞÅÏ¢.
+				// å‘é€ç”¨æˆ·å¯†ç ä¿¡æ¯.
 				len = boost::asio::async_write(m_socket, request, boost::asio::transfer_exactly(bytes_to_write), yield[ec]);
 				if (ec)
 				{
@@ -592,7 +592,7 @@ namespace socks {
 				}
 				BOOST_ASSERT("len == bytes_to_write" && len == bytes_to_write);
 
-				// ¶ÁÈ¡×´Ì¬.
+				// è¯»å–çŠ¶æ€.
 				response.consume(response.size());
 				len = boost::asio::async_read(m_socket, response, boost::asio::transfer_exactly(2), yield[ec]);
 				if (ec)
@@ -602,14 +602,14 @@ namespace socks {
 				}
 				BOOST_ASSERT("len == 2" && len == 2);
 
-				// ¶ÁÈ¡°æ±¾×´Ì¬.
+				// è¯»å–ç‰ˆæœ¬çŠ¶æ€.
 				boost::asio::const_buffer cb = response.data();
 				const char* cp = boost::asio::buffer_cast<const char*>(cb);
 
 				int version = read_uint8(cp);
 				int status = read_uint8(cp);
 
-				// ²»Ö§³ÖµÄÈÏÖ¤°æ±¾.
+				// ä¸æ”¯æŒçš„è®¤è¯ç‰ˆæœ¬.
 				if (version != 1)
 				{
 					ec = errc::socks_unsupported_authentication_version;
@@ -617,7 +617,7 @@ namespace socks {
 					return;
 				}
 
-				// ÈÏÖ¤´íÎó.
+				// è®¤è¯é”™è¯¯.
 				if (status != 0)
 				{
 					ec = errc::socks_authentication_error;
@@ -635,7 +635,7 @@ namespace socks {
 				boost::asio::mutable_buffer mb = request.prepare(std::max<std::size_t>(bytes_to_write, 22));
 				char* wp = boost::asio::buffer_cast<char*>(mb);
 
-				// ·¢ËÍsocks5Á¬½ÓÃüÁî.
+				// å‘é€socks5è¿æ¥å‘½ä»¤.
 				write_uint8(5, wp); // SOCKS VERSION 5.
 									// CONNECT/UDP command.
 				write_uint8(m_socks_address.udp_associate ? SOCKS5_CMD_UDP : SOCKS_CMD_CONNECT, wp);
@@ -706,16 +706,16 @@ namespace socks {
 
 					if (m_socks_address.udp_associate)
 					{
-						// ¸üĞÂÔ¶³ÌµØÖ·, ºóÃæÓÃÓÚudp´«Êä.
+						// æ›´æ–°è¿œç¨‹åœ°å€, åé¢ç”¨äºudpä¼ è¾“.
 						m_remote_endp.address(m_socket.remote_endpoint(ec).address());
-						std::cout << "* SOCKS udp server: " << m_remote_endp.address().to_string()
-							<< ":" << m_remote_endp.port() << "\n";
-						// ÔÚÕâÖ®ºó£¬±£³ÖÕâ¸ötcpÁ¬½ÓÖ±µ½udp´úÀíÒ²²»ĞèÒªÁË.
+						LOG_DBG << "* SOCKS udp server: " << m_remote_endp.address().to_string()
+							<< ":" << m_remote_endp.port();
+						// åœ¨è¿™ä¹‹åï¼Œä¿æŒè¿™ä¸ªtcpè¿æ¥ç›´åˆ°udpä»£ç†ä¹Ÿä¸éœ€è¦äº†.
 					}
 					else
 					{
-						std::cout << "* SOCKS remote host: " << m_remote_endp.address().to_string()
-							<< ":" << m_remote_endp.port() << "\n";
+						LOG_DBG << "* SOCKS remote host: " << m_remote_endp.address().to_string()
+							<< ":" << m_remote_endp.port();
 					}
 
 					response.consume(len);
@@ -742,7 +742,7 @@ namespace socks {
 						domain.push_back(read_uint8(rp));
 					auto port = read_uint16(rp);
 
-					std::cout << "* SOCKS remote host: " << domain << ":" << port << "\n";
+					LOG_DBG << "* SOCKS remote host: " << domain << ":" << port;
 					response.consume(len + 10);
 					BOOST_ASSERT("response.size() == 0" && response.size() == 0);
 				}
@@ -763,7 +763,7 @@ namespace socks {
 				if (resp != 0)
 				{
 					ec = errc::socks_general_failure;
-					// µÃµ½¸üÏêÏ¸µÄ´íÎóĞÅÏ¢.
+					// å¾—åˆ°æ›´è¯¦ç»†çš„é”™è¯¯ä¿¡æ¯.
 					switch (resp)
 					{
 					case 2: ec = boost::asio::error::no_permission; break;
@@ -779,7 +779,7 @@ namespace socks {
 					return;
 				}
 
-				ec = boost::system::error_code();	// Ã»ÓĞ·¢Éú´íÎó, ·µ»Ø.
+				ec = boost::system::error_code();	// æ²¡æœ‰å‘ç”Ÿé”™è¯¯, è¿”å›.
 				handler(ec);
 				return;
 			}

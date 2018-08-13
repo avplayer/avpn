@@ -94,6 +94,7 @@ int platform_init()
 int main(int argc, char** argv)
 {
 	platform_init();
+	init_logging(false);
 
 	io_context io;
 
@@ -128,7 +129,7 @@ int main(int argc, char** argv)
 #endif
 	if (!tap.open(cfg))
 	{
-		printf("open tun device fail!\n");
+		LOG_ERR << "open tun device fail!";
 		return -1;
 	}
 

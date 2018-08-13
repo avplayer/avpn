@@ -3,7 +3,6 @@
 #include <deque>
 #include <unordered_map>
 
-
 #include <boost/asio/spawn.hpp>
 #include <boost/function.hpp>
 #include <boost/bind.hpp>
@@ -21,245 +20,85 @@
 #include <boost/asio/ip/tcp.hpp>
 #include <boost/config.hpp>
 
-#include "tuntap.hpp"
+#include "vpncore/tuntap.hpp"
 using namespace tuntap_service;
 
+#include "vpncore/endpoint_pair.hpp"
+#include "vpncore/chksum.hpp"
 
 namespace avpncore {
 
-	struct endpoint_pair
+	// 定义IP包数据缓存结构, 这个结构允许
+	// 自己管理自己的内存, 使用 boost::local_shared_ptr 来管理
+	// 内存资源, 主要是这里不需要考虑线程安全, 避免原子操作.
+	// 因为avpn的为异步设计, 整个avpncore程序总是运行在一个线程中
+	// 类似于nodejs, 但并不表示做不到多线程.
+	// 支持多线程需要实现一个线程安全的ip包分离, 然后将不同tcp
+	// 连接的ip包通过线程安全的方式给到tcp stream中, 同样 tcp stream
+	// 也需要一个线程安全的方式将组好的ip包回传到ip包分离器.
+	// 实践证明, 纯io而非大量cpu密集计算对多线程的需求并不大, 反而
+	// 容易因为多线程的调度以及线程安全上锁等导致io效率降低.
+	// avpn恰好是一个纯io而大量cpu密集计算的程序.
+	struct ip_buffer
 	{
-		boost::asio::ip::tcp::endpoint src_;
-		boost::asio::ip::tcp::endpoint dst_;
-
-		int type_;
-
-		endpoint_pair()
-			: type_(-1)
+		ip_buffer()
+			: len_(-1)
 		{}
 
-		// ipv4地址传入构造endpoint pair.
-		endpoint_pair(uint32_t src_ip, uint16_t src_port,
-			uint32_t dst_ip, uint16_t dst_port)
-			: type_(-1)
+		ip_buffer(int len)
+			: buf_(new uint8_t[len])
+			, len_(len)
+		{}
+
+		void assign(uint8_t* p, int len)
 		{
-			src_.address(boost::asio::ip::address_v4(ntohl(src_ip)));
-			src_.port(ntohs(src_port));
-			dst_.address(boost::asio::ip::address_v4(ntohl(dst_ip)));
-			dst_.port(ntohs(dst_port));
+			buf_.reset(new uint8_t[len]);
+			std::memcpy(buf_.get(), p, len);
+			len_ = len;
+		}
+
+		void attach(uint8_t* p, int len)
+		{
+			buf_.reset(p);
+			len_ = len;
+		}
+
+		uint8_t* data() const
+		{
+			return buf_.get();
+		}
+
+		int len() const
+		{
+			return len_;
 		}
 
 		bool empty() const
 		{
-			return type_ < 0;
-		}
-
-		void reserve()
-		{
-			auto tmp = src_;
-			src_ = dst_;
-			dst_ = tmp;
-		}
-
-		std::string to_string()
-		{
-			std::ostringstream oss;
-			oss << src_ << " - " << dst_;
-			return oss.str();
-		}
-	};
-
-	bool operator==(const endpoint_pair& lh, const endpoint_pair& rh)
-	{
-		if (lh.src_ == rh.src_ && lh.dst_ == rh.dst_)
-			return true;
-		return false;
-	}
-
-	bool operator!=(const endpoint_pair& lh, const endpoint_pair& rh)
-	{
-		if (lh.src_ != rh.src_ || lh.dst_ != rh.dst_)
-			return true;
-		return false;
-	}
-
-	bool operator<(const endpoint_pair& lh, const endpoint_pair& rh)
-	{
-		if (lh.src_ < rh.src_)
-			return true;
-
-		if (lh.src_ != rh.src_)
+			if (len_ <= 0 || !buf_)
+				return true;
 			return false;
-
-		if (lh.dst_ < rh.dst_)
-			return true;
-
-		return false;
-	}
-
-	bool operator>(const endpoint_pair& lh, const endpoint_pair& rh)
-	{
-		if (rh < lh)
-			return true;
-		if (lh == rh)
-			return false;
-		return true;
-	}
-}
-
-namespace std
-{
-	template<> struct hash<boost::asio::ip::tcp::endpoint>
-	{
-		typedef boost::asio::ip::tcp::endpoint argument_type;
-		typedef std::size_t result_type;
-		result_type operator()(argument_type const& s) const
-		{
-			std::string temp = s.address().to_string();
-			std::size_t seed = 0;
-			boost::hash_combine(seed, temp);
-			boost::hash_combine(seed, s.port());
-			return seed;
 		}
+
+		boost::local_shared_ptr<uint8_t> buf_;
+		int len_;
 	};
 
-	template<> struct hash<avpncore::endpoint_pair>
-	{
-		typedef avpncore::endpoint_pair argument_type;
-		typedef std::size_t result_type;
-		result_type operator()(argument_type const& s) const
-		{
-			result_type const h1(std::hash<boost::asio::ip::tcp::endpoint>{}(s.src_));
-			result_type const h2(std::hash<boost::asio::ip::tcp::endpoint>{}(s.dst_));
-			std::size_t seed = 0;
-			boost::hash_combine(seed, h1);
-			boost::hash_combine(seed, h2);
-			return seed;
-		}
-	};
-}
 
-namespace avpncore {
 
-	inline uint32_t fold_uint32t(uint32_t c)
-	{
-		return ((uint32_t)(((c) >> 16) + ((c) & 0x0000ffffUL)));
-	}
 
-	inline uint16_t standard_chksum(const uint8_t *dataptr, int len)
-	{
-		const uint8_t* pb = dataptr;
-		const uint16_t* ps = nullptr;
-		uint16_t t = 0;
-		uint32_t sum = 0;
-		int odd = ((uintptr_t)pb & 1);
-
-		/* Get aligned to u16_t */
-		if (odd && len > 0) {
-			((uint8_t *)&t)[1] = *pb++;
-			len--;
-		}
-
-		/* Add the bulk of the data */
-		ps = (const uint16_t *)(const void *)pb;
-		while (len > 1) {
-			sum += *ps++;
-			len -= 2;
-		}
-
-		/* Consume left-over byte, if any */
-		if (len > 0) {
-			((uint8_t *)&t)[0] = *(const uint8_t *)ps;
-		}
-
-		/* Add end bytes */
-		sum += t;
-
-		/* Fold 32-bit sum to 16 bits
-		calling this twice is probably faster than if statements... */
-		sum = fold_uint32t(sum);
-		sum = fold_uint32t(sum);
-
-		/* Swap if alignment was odd */
-		if (odd) {
-			sum = (((sum) & 0xff) << 8) | (((sum) & 0xff00) >> 8);
-		}
-
-		return (uint16_t)sum;
-	}
-
-	inline uint32_t inet_cksum_pseudo_base(const uint8_t* buf, int len, uint32_t acc)
-	{
-		int swapped = 0;
-
-		acc += standard_chksum(buf, len);
-		acc = fold_uint32t(acc);
-
-		if (len % 2 != 0)
-		{
-			swapped = !swapped;
-			acc = (((acc) & 0xff) << 8) | (((acc) & 0xff00) >> 8);
-		}
-
-		if (swapped) {
-			acc = (((acc) & 0xff) << 8) | (((acc) & 0xff00) >> 8);
-		}
-
-		acc += (uint32_t)htons((uint16_t)0x0006);
-		acc += (uint32_t)htons(len);
-
-		/* Fold 32-bit sum to 16 bits
-		calling this twice is probably faster than if statements... */
-		acc = fold_uint32t(acc);
-		acc = fold_uint32t(acc);
-
-		return (uint16_t)~(acc & 0xffffUL);
-	}
-
-	inline uint16_t tcp_chksum_pseudo(const uint8_t* buf, int len, const endpoint_pair& endp)
-	{
-		uint32_t acc;
-		uint32_t addr;
-
-		addr = ntohl(endp.src_.address().to_v4().to_uint());
-		acc = (addr & 0xffffUL);
-		acc = (uint32_t)(acc + ((addr >> 16) & 0xffffUL));
-		addr = ntohl(endp.dst_.address().to_v4().to_uint());
-		acc = (uint32_t)(acc + (addr & 0xffffUL));
-		acc = (uint32_t)(acc + ((addr >> 16) & 0xffffUL));
-
-		/* fold down to 16 bits */
-		acc = fold_uint32t(acc);
-		acc = fold_uint32t(acc);
-
-		return inet_cksum_pseudo_base(buf, len, acc);
-	}
-
-	typedef std::pair<uint8_t*, int> buffer_pair;
-
-	inline buffer_pair make_buffer_pair(uint8_t* buf, int len)
-	{
-		buffer_pair pair;
-		pair.first = buf;
-		pair.second = len;
-		return pair;
-	}
-
-	inline void free_buffer_pair(buffer_pair& pair)
-	{
-		if (pair.first)
-		{
-			delete pair.first;
-			pair.first = nullptr;
-		}
-		pair.second = 0;
-	}
-
+	// 定义接收到tcp连接请求时的accept handler, 每个tcp连接收到
+	// syn将会触发这个handler的调用, 在这个handler中, 需要确认
+	// 是否接受或拒绝这个tcp连接, 如果拒绝将会发回一个rst/fin的
+	// 数据包, 在这个handler里使用accept函数来确认是否接受这个
+	// syn连接请求.
 	using accept_handler =
 		boost::function<void(const boost::system::error_code&)>;
 
 	class tcp_stream
 	{
+
+
 		enum tcp_state
 		{
 			ts_invalid = -1,
@@ -337,8 +176,11 @@ namespace avpncore {
 		}
 
 	public:
-		using callback_func = boost::function<void(
-			const endpoint_pair&, buffer_pair)>;
+
+		// write_ip_packet_func 用于写入一个ip包
+		// 到底层.
+		using write_ip_packet_func = boost::function<void(
+			const endpoint_pair&, ip_buffer)>;
 
 		tcp_stream(boost::asio::io_context& io_context)
 			: m_io_context(io_context)
@@ -346,7 +188,7 @@ namespace avpncore {
 			, m_abort(false)
 		{}
 
-		void set_handlers(callback_func cb, accept_handler ah)
+		void set_handlers(write_ip_packet_func cb, accept_handler ah)
 		{
 			m_callback_func = cb;
 			m_accept_handler = ah;	// 如果是连接请求则回调.
@@ -369,8 +211,8 @@ namespace avpncore {
 				return;
 			m_accepted = true;
 
-			auto pair = make_buffer_pair(new uint8_t[40], 40);
-			auto ip = pair.first;
+			ip_buffer buffer(40);
+			auto ip = buffer.data();
 			auto tcp = ip + 20;
 			auto& rsv = m_endp_reserve;
 
@@ -407,7 +249,7 @@ namespace avpncore {
 			m_tsm.state_ = tcp_state::ts_syn_sent;
 
 			// 回调写回数据.
-			m_callback_func(rsv, pair);
+			m_callback_func(rsv, buffer);
 		}
 
 		// 接收底层ip数据.
@@ -438,9 +280,60 @@ namespace avpncore {
 				m_endp_reserve.reserve();
 			}
 
-			// 解析tcp数据, 执行对应的操作.
-			// 如果是syn请求.
-			
+			// 下面开始执行tcp状态机, 总体参考下面实现, 稍作修改的地方几个就是这里初始状态设置
+			// 为ts_invalid, 而不是closed, 因为这里我需要判断一个tcp stream对象是已经closed
+			// 的, 还是新开的等待连接的对象, 另外执行到time_wait时, 按标准需要等待2MSL个时间
+			// 再关闭, 在这个时间一直占用, 因为avpn里当一个连接到time_wait状态的时候, 对外实际
+			// 是一个连接, 这个连接关闭了并不影响下一次, client使用相同ip:port来向相同server:
+			// port发起请求.
+			//
+			//
+			//                              +---------+ ---------\      active OPEN
+			//                              |  CLOSED |            \    -----------
+			//                              +---------+<---------\   \   create TCB
+			//                                |     ^              \   \  snd SYN
+			//                   passive OPEN |     |   CLOSE        \   \
+			//                   ------------ |     | ----------       \   \
+			//                    create TCB  |     | delete TCB         \   \
+			//                                V     |                      \   \
+			//                              +---------+            CLOSE    |    \
+			//                              |  LISTEN |          ---------- |     |
+			//                              +---------+          delete TCB |     |
+			//                   rcv SYN      |     |     SEND              |     |
+			//                  -----------   |     |    -------            |     V
+			// +---------+      snd SYN,ACK  /       \   snd SYN          +---------+
+			// |         |<-----------------           ------------------>|         |
+			// |   SYN   |                    rcv SYN                     |   SYN   |
+			// |   RCVD  |<-----------------------------------------------|   SENT  |
+			// |         |                    snd ACK                     |         |
+			// |         |------------------           -------------------|         |
+			// +---------+   rcv ACK of SYN  \       /  rcv SYN,ACK       +---------+
+			//   |           --------------   |     |   -----------
+			//   |                  x         |     |     snd ACK
+			//   |                            V     V
+			//   |  CLOSE                   +---------+
+			//   | -------                  |  ESTAB  |
+			//   | snd FIN                  +---------+
+			//   |                   CLOSE    |     |    rcv FIN
+			//   V                  -------   |     |    -------
+			// +---------+          snd FIN  /       \   snd ACK          +---------+
+			// |  FIN    |<-----------------           ------------------>|  CLOSE  |
+			// | WAIT-1  |------------------                              |   WAIT  |
+			// +---------+          rcv FIN  \                            +---------+
+			//   | rcv ACK of FIN   -------   |                            CLOSE  |
+			//   | --------------   snd ACK   |                           ------- |
+			//   V        x                   V                           snd FIN V
+			// +---------+                  +---------+                   +---------+
+			// |FINWAIT-2|                  | CLOSING |                   | LAST-ACK|
+			// +---------+                  +---------+                   +---------+
+			//   |                rcv ACK of FIN |                 rcv ACK of FIN |
+			//   |  rcv FIN       -------------- |    Timeout=2MSL -------------- |
+			//   |  -------              x       V    ------------        x       V
+			//    \ snd ACK                 +---------+delete TCB         +---------+
+			//     ------------------------>|TIME WAIT|------------------>| CLOSED  |
+			//                              +---------+                   +---------+
+
+
 			uint32_t seq = ntohl(*(uint32_t*)(p + 4));
 			m_tsm.ack_ = ntohl(*(uint32_t*)(p + 8));
 			uint32_t offset = (((*(p + 12)) >> 4) & 0x0f) * 4;
@@ -644,8 +537,8 @@ namespace avpncore {
 				ack += 1;
 
 			// 回写ack.
-			auto pair = make_buffer_pair(new uint8_t[20 + 20], 40);
-			auto ip = pair.first;
+			ip_buffer buffer(40);
+			auto ip = buffer.data();
 			auto tcp = ip + 20;
 			auto& rsv = m_endp_reserve;;
 
@@ -659,7 +552,7 @@ namespace avpncore {
 			make_tcp_header(tcp, 20, rsv, m_tsm.lseq_, m_tsm.lack_, flags.data);
 
 			// 回调写回ack数据.
-			m_callback_func(rsv, pair);
+			m_callback_func(rsv, buffer);
 		}
 
 		// 发送数据.
@@ -673,8 +566,8 @@ namespace avpncore {
 			auto iplen = 20 + 20 + payload_len;
 
 			// 回写ack.
-			auto pair = make_buffer_pair(new uint8_t[iplen], iplen);
-			auto ip = pair.first;
+			ip_buffer buffer(iplen);
+			auto ip = buffer.data();
 			auto tcp = ip + 20;
 			auto& rsv = m_endp_reserve;;
 
@@ -693,7 +586,7 @@ namespace avpncore {
 			m_tsm.lseq_ += payload_len;
 
 			// 回调写回ack数据.
-			m_callback_func(rsv, pair);
+			m_callback_func(rsv, buffer);
 
 			return payload_len;
 		}
@@ -743,8 +636,8 @@ namespace avpncore {
 				rst = true;
 			}
 
-			auto pair = make_buffer_pair(new uint8_t[40], 40);
-			auto ip = pair.first;
+			ip_buffer buffer(40);
+			auto ip = buffer.data();
 			auto tcp = ip + 20;
 			auto& rsv = m_endp_reserve;
 
@@ -764,13 +657,13 @@ namespace avpncore {
 			m_tsm.lseq_ += 1;
 
 			// 回调写回数据.
-			m_callback_func(rsv, pair);
+			m_callback_func(rsv, buffer);
 		}
 
 		void reset()
 		{
-			auto pair = make_buffer_pair(new uint8_t[40], 40);
-			auto ip = pair.first;
+			ip_buffer buffer(40);
+			auto ip = buffer.data();
 			auto tcp = ip + 20;
 			auto& rsv = m_endp_reserve;
 
@@ -791,7 +684,7 @@ namespace avpncore {
 			m_tsm.state_ = tcp_state::ts_closed;
 
 			// 回调写回数据.
-			m_callback_func(rsv, pair);
+			m_callback_func(rsv, buffer);
 		}
 
 		endpoint_pair tcp_endpoint_pair() const
@@ -809,7 +702,7 @@ namespace avpncore {
 		boost::asio::io_context& m_io_context;
 		endpoint_pair m_endp;
 		endpoint_pair m_endp_reserve;
-		callback_func m_callback_func;
+		write_ip_packet_func m_callback_func;
 		accept_handler m_accept_handler;
 		boost::asio::streambuf m_tcp_recv_buffer;
 		bool m_accepted;
@@ -835,12 +728,7 @@ namespace avpncore {
 		{}
 
 		~avpn_acceptor()
-		{
-			for (auto& q : m_queue)
-			{
-				free_buffer_pair(q);
-			}
-		}
+		{}
 
 		// 开始工作.
 		void start()
@@ -905,9 +793,9 @@ namespace avpncore {
 			}
 		}
 
-		void ip_packet(const endpoint_pair& endp, buffer_pair buffer)
+		void ip_packet(const endpoint_pair& endp, ip_buffer buffer)
 		{
-			if (buffer.second <= 0) // 连接已经销毁.
+			if (buffer.empty())			// 连接已经销毁, 传过来空包.
 			{
 				remove_stream(endp);
 				return;
@@ -916,11 +804,11 @@ namespace avpncore {
 			static uint16_t index = 0;
 
 			// 打包ip头.
-			uint8_t* p = buffer.first;
+			uint8_t* p = buffer.data();
 
 			*((uint8_t*)(p + 0)) = 0x45; // version
 			*((uint8_t*)(p + 1)) = 0x00; // tos
-			*((uint16_t*)(p + 2)) = htons((uint16_t)buffer.second); // ip length
+			*((uint16_t*)(p + 2)) = htons((uint16_t)buffer.len()); // ip length
 			*((uint16_t*)(p + 4)) = htons(index++);	// id
 			*((uint16_t*)(p + 6)) = 0x00;	// flag
 			*((uint8_t*)(p + 8)) = 0x30; // ttl
@@ -933,10 +821,8 @@ namespace avpncore {
 			*((uint16_t*)(p + 10)) = (uint16_t)~(unsigned int)standard_chksum(p, 20);// htons(sum); // ip header checksum
 
 			// 写入tun设备.
-			auto pair = make_buffer_pair(buffer.first, buffer.second);
-
 			bool write_in_progress = !m_queue.empty();
-			m_queue.push_back(pair);
+			m_queue.push_back(buffer);
 
 			if (!write_in_progress)
 			{
@@ -969,7 +855,7 @@ namespace avpncore {
 			if (type == 6/* || type == 0x11*/)		// only tcp
 			{
 				auto p = buf + ihl;
-				
+
 				uint16_t src_port = /*ntohs*/(*(uint16_t*)(p + 0));
 				uint16_t dst_port = /*ntohs*/(*(uint16_t*)(p + 2));
 
@@ -1007,7 +893,7 @@ namespace avpncore {
 				boost::system::error_code ec;
 				auto p = m_queue.front();
 				auto bytes_transferred = m_input.async_write_some(
-					boost::asio::buffer(p.first, p.second), yield[ec]);
+					boost::asio::buffer(p.data(), p.len_), yield[ec]);
 				if (ec)
 					break;
 				if (bytes_transferred == 0)
@@ -1018,7 +904,6 @@ namespace avpncore {
 						continue;
 					break;
 				}
-				free_buffer_pair(p);
 				m_queue.pop_front();
 			}
 		}
@@ -1034,8 +919,7 @@ namespace avpncore {
 			accept_handler handler_;
 		};
 		std::vector<back_accept> m_accept_list;
-		std::deque<buffer_pair> m_queue;
-		// 写入队列.
+		std::deque<ip_buffer> m_queue;
 		bool m_abort;
 	};
 

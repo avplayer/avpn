@@ -62,7 +62,9 @@ static const char			drv_name[] = "tun";
 
 #endif
 
-#include "tuntap_config.hpp"
+#include "vpncore/logging.hpp"
+#include "vpncore/tuntap_config.hpp"
+
 
 namespace tuntap_service {
 
@@ -88,18 +90,18 @@ namespace tuntap_service {
 				dev, prop);
 
 			if (ret <= 0 || ret >= sizeof(fname)) {
-				fprintf(stderr, "could not build pathname for property\n");
+				LOG_ERR << "could not build pathname for property";
 				return -1;
 			}
 
 			fp = fopen(fname, "r");
 			if (fp == NULL) {
-				fprintf(stderr, "fopen %s: fail\n", fname);
+				LOG_ERR << "fopen " << fname << " fail";
 				return -1;
 			}
 
 			if (!fgets(buf, sizeof(buf), fp)) {
-				fprintf(stderr, "property \"%s\" in file %s is currently unknown\n", prop, fname);
+				LOG_ERR << "property '" << prop << "' in file " << fname << "is currently unknown";
 				fclose(fp);
 				goto out;
 			}
@@ -112,8 +114,7 @@ namespace tuntap_service {
 			result = strtol(buf, &endp, 0);
 
 			if (*endp || buf == endp) {
-				fprintf(stderr, "value \"%s\" in file %s is not a number\n",
-					buf, fname);
+				LOG_ERR << "value '" << buf << "' in file " << fname << " is not a number";
 				goto out;
 			}
 
@@ -121,7 +122,7 @@ namespace tuntap_service {
 			return 0;
 
 		out:
-			fprintf(stderr, "Failed to parse %s\n", fname);
+			LOG_ERR << "failed to parse " << fname;
 			return -1;
 		}
 	}
@@ -211,8 +212,7 @@ namespace tuntap_service {
 				return false;
 			}
 
-			printf("TUN / TAP device %s opened\n", ifr.ifr_name);
-			// cfg.dev_name_ = ifr.ifr_name;
+			LOG_DBG << "TUN / TAP device " << ifr.ifr_name << " opened";
 
 			// open dummy socket for ioctls
 			int sock = socket(AF_INET, SOCK_DGRAM, 0);
@@ -276,7 +276,8 @@ namespace tuntap_service {
 //			}
 
 			m_tuntap_fd = fd;
-			printf("TUN / TAP device %s successd, %d\n", ifr.ifr_name, fd);
+
+			LOG_DBG << "TUN / TAP device " << ifr.ifr_name << " successd, " << fd;
 
 #endif
 			return true;
@@ -574,7 +575,7 @@ namespace tuntap_service {
 				dev.name_ = name;
 				dev.dev_type_ = dev_tun;
 				m_device_list.push_back(dev);
-				printf("iframe: %s, tun type: %d\n", name, flags);
+				LOG_DBG << "iframe: " << name << ", tun type: " << flags;
 			}
 
 			if (flags & IFF_TAP)
@@ -583,7 +584,7 @@ namespace tuntap_service {
 				dev.name_ = name;
 				dev.dev_type_ = dev_tap;
 				m_device_list.push_back(dev);
-				printf("iframe: %s, tap type: %d\n", name, flags);
+				LOG_DBG << "iframe: " << name << ", tap type: " << flags;
 			}
 #endif
 			return 0;
