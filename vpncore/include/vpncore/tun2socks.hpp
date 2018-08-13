@@ -222,7 +222,7 @@ namespace avpncore {
 				}
 
 				ts->close();
-				LOG_DBG << ts->tcp_endpoint_pair() << " read socks total: "
+				LOG_DBG << ts->tcp_endpoint_pair() << " 1. read socks total: "
 					<< total << ", leak data: " << buffer.size();
 			});
 
@@ -270,7 +270,7 @@ namespace avpncore {
 				}
 
 				ts->close();
-				LOG_DBG << ts->tcp_endpoint_pair() << " read local total: "
+				LOG_DBG << ts->tcp_endpoint_pair() << " 2. read local total: "
 					<< total << ", leak data: " << buffer.size();
 			});
 		}
