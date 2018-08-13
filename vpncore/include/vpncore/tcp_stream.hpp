@@ -201,12 +201,14 @@ namespace avpncore {
 			{
 				flags.flag.syn = 1;
 				flags.flag.fin = 1;
+				do_close();
 			}
 			else
 			{
 				flags.flag.ack = 1;
 				flags.flag.syn = 1;
 				flags.flag.rst = 1;
+				do_close();
 			}
 
 			make_tcp_header(tcp, 20, rsv, m_tsm.lseq_, m_tsm.lack_, flags.data);
