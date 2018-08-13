@@ -101,7 +101,7 @@ namespace avpncore {
 		void accept_handle(tcp_stream* ts, const boost::system::error_code& ec)
 		{
 			tcp_stream* new_ts = make_tcp_stream();
-			m_tcp_streams[new_ts] = ts->self();
+			m_tcp_streams[new_ts] = new_ts->self();
 			m_avpn_acceptor->async_accept(new_ts);
 
 			auto self = ts->self();
@@ -166,7 +166,7 @@ namespace avpncore {
 
 		void close_handler(tcp_stream* ts, const boost::system::error_code& ec)
 		{
-			LOG_DBG << "tcp stream closed: " << ts->tcp_endpoint_pair();
+			LOG_DBG << ts->tcp_endpoint_pair() << " destroy stream.";
 			m_avpn_acceptor->remove_stream(ts->tcp_endpoint_pair());
 			m_tcp_streams.erase(ts);
 		}
@@ -206,7 +206,6 @@ namespace avpncore {
 					{
 						LOG_DBG << ts->tcp_endpoint_pair() << " read socks " << ec.message();
 						socks.shutdown(boost::asio::ip::tcp::socket::shutdown_receive, ec);
-						ts->close();
 						break;
 					}
 					buffer.commit(bytes);
@@ -219,7 +218,9 @@ namespace avpncore {
 					buffer.consume(ret);
 				}
 
-				LOG_DBG << ts->tcp_endpoint_pair() << " read socks total: " << total;
+				ts->close();
+				LOG_DBG << ts->tcp_endpoint_pair() << " read socks total: "
+					<< total << ", leak data: " << buffer.size();
 			});
 
 			boost::asio::spawn([this, self, ts, socks_ptr]
@@ -255,15 +256,16 @@ namespace avpncore {
 					auto bytes = boost::asio::async_write(socks, buffer, yield[ec]);
 					if (ec)
 					{
-						LOG_DBG << ts->tcp_endpoint_pair() << " write local: " << ec.message();
+						LOG_DBG << ts->tcp_endpoint_pair() << " write socks: " << ec.message();
 						socks.shutdown(boost::asio::ip::tcp::socket::shutdown_send, ec);
-						ts->close();
 						break;
 					}
 					buffer.consume(bytes);
 				}
 
-				LOG_DBG << ts->tcp_endpoint_pair() << " read tuntap total: " << total;
+				ts->close();
+				LOG_DBG << ts->tcp_endpoint_pair() << " read local total: "
+					<< total << ", leak data: " << buffer.size();
 			});
 		}
 
