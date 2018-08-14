@@ -126,10 +126,9 @@ namespace avpncore {
 
 	public:
 
-		// write_ip_packet_func 用于写入一个ip包
+		// write_ip_packet_handler 用于写入一个ip包
 		// 到底层.
-		using write_ip_packet_func = std::function<void(
-			const endpoint_pair&, ip_buffer)>;
+		using write_ip_packet_handler = std::function<void(ip_buffer)>;
 
 		tcp_stream(boost::asio::io_context& io_context)
 			: m_io_context(io_context)
@@ -149,7 +148,7 @@ namespace avpncore {
 			m_accept_handler = handler;
 		}
 
-		void set_write_ip_handler(write_ip_packet_func handler)
+		void set_write_ip_handler(write_ip_packet_handler handler)
 		{
 			m_write_ip_handler = handler;
 		}
@@ -180,10 +179,9 @@ namespace avpncore {
 
 			m_accepted = true;
 
-			ip_buffer buffer(40);
+			ip_buffer buffer(40, m_endp_reserve);
 			auto ip = buffer.data();
 			auto tcp = ip + 20;
-			auto& rsv = m_endp_reserve;
 
 			tcp_flags flags;
 			flags.data = 0;
@@ -211,7 +209,7 @@ namespace avpncore {
 				do_close();
 			}
 
-			make_tcp_header(tcp, 20, rsv, m_tsm.lseq_, m_tsm.lack_, flags.data);
+			make_tcp_header(tcp, 20, buffer.endp_, m_tsm.lseq_, m_tsm.lack_, flags.data);
 
 			// 回复ack之后本地seq加1
 			m_tsm.lseq_ += 1;
@@ -220,7 +218,7 @@ namespace avpncore {
 			m_tsm.state_ = tcp_state::ts_syn_sent;
 
 			// 回调写回数据.
-			m_write_ip_handler(rsv, buffer);
+			m_write_ip_handler(buffer);
 		}
 
 		// 接收底层ip数据.
@@ -539,22 +537,19 @@ namespace avpncore {
 				ack += 1;
 
 			// 回写ack.
-			ip_buffer buffer(40);
+			ip_buffer buffer(40, m_endp_reserve);
 			auto ip = buffer.data();
 			auto tcp = ip + 20;
-			auto& rsv = m_endp_reserve;;
-
-			rsv.type_ = type;
 
 			flags.data = 0;
 			flags.flag.ack = 1;
 
 			m_tsm.lack_ = ack;
 
-			make_tcp_header(tcp, 20, rsv, m_tsm.lseq_, m_tsm.lack_, flags.data);
+			make_tcp_header(tcp, 20, buffer.endp_, m_tsm.lseq_, m_tsm.lack_, flags.data);
 
 			// 回调写回ack数据.
-			m_write_ip_handler(rsv, buffer);
+			m_write_ip_handler(buffer);
 		}
 
 		// 上层发送数据接口.
@@ -568,12 +563,9 @@ namespace avpncore {
 			auto iplen = 20 + 20 + payload_len;
 
 			// 回写ack.
-			ip_buffer buffer(iplen);
+			ip_buffer buffer(iplen, m_endp_reserve);
 			auto ip = buffer.data();
 			auto tcp = ip + 20;
-			auto& rsv = m_endp_reserve;;
-
-			rsv.type_ = ip_tcp;
 
 			tcp_flags flags;
 			flags.data = 0;
@@ -582,13 +574,13 @@ namespace avpncore {
 			// 复制数据到payload位置.
 			std::memcpy(tcp + 20, payload, payload_len);
 
-			make_tcp_header(tcp, 20 + payload_len, rsv, m_tsm.lseq_, m_tsm.lack_, flags.data);
+			make_tcp_header(tcp, 20 + payload_len, buffer.endp_, m_tsm.lseq_, m_tsm.lack_, flags.data);
 
 			// 增加本地seq.
 			m_tsm.lseq_ += payload_len;
 
 			// 回调写回ack数据.
-			m_write_ip_handler(rsv, buffer);
+			m_write_ip_handler(buffer);
 
 			return payload_len;
 		}
@@ -642,12 +634,9 @@ namespace avpncore {
 				rst = true;
 			}
 
-			ip_buffer buffer(40);
+			ip_buffer buffer(40, m_endp_reserve);
 			auto ip = buffer.data();
 			auto tcp = ip + 20;
-			auto& rsv = m_endp_reserve;
-
-			rsv.type_ = ip_tcp;
 
 			tcp_flags flags;
 			flags.data = 0;
@@ -657,30 +646,27 @@ namespace avpncore {
 			else
 				flags.flag.fin = 1;
 			flags.flag.ack = 1;
-			make_tcp_header(tcp, 20, rsv, m_tsm.lseq_, m_tsm.lack_, flags.data);
+			make_tcp_header(tcp, 20, buffer.endp_, m_tsm.lseq_, m_tsm.lack_, flags.data);
 
 			// 回复ack之后本地seq加1
 			m_tsm.lseq_ += 1;
 
 			// 回调写回数据.
-			m_write_ip_handler(rsv, buffer);
+			m_write_ip_handler(buffer);
 		}
 
 		void reset()
 		{
-			ip_buffer buffer(40);
+			ip_buffer buffer(40, m_endp_reserve);
 			auto ip = buffer.data();
 			auto tcp = ip + 20;
-			auto& rsv = m_endp_reserve;
-
-			rsv.type_ = ip_tcp;
 
 			tcp_flags flags;
 			flags.data = 0;
 
 			flags.flag.ack = 1;
 			flags.flag.rst = 1;
-			make_tcp_header(tcp, 20, rsv, m_tsm.lseq_, m_tsm.lack_, flags.data);
+			make_tcp_header(tcp, 20, buffer.endp_, m_tsm.lseq_, m_tsm.lack_, flags.data);
 
 			// 回复ack之后本地seq加1
 			m_tsm.lseq_ += 1;
@@ -690,7 +676,7 @@ namespace avpncore {
 			m_tsm.state_ = tcp_state::ts_closed;
 
 			// 回调写回数据.
-			m_write_ip_handler(rsv, buffer);
+			m_write_ip_handler(buffer);
 
 			do_close();
 		}
@@ -720,7 +706,7 @@ namespace avpncore {
 		boost::asio::io_context& m_io_context;
 		endpoint_pair m_endp;
 		endpoint_pair m_endp_reserve;
-		write_ip_packet_func m_write_ip_handler;
+		write_ip_packet_handler m_write_ip_handler;
 		accept_handler m_accept_handler;
 		closed_handler m_closed_handler;
 		boost::asio::streambuf m_tcp_recv_buffer;

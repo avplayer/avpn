@@ -103,7 +103,7 @@ namespace avpncore {
 							m_accept_list.pop_back();
 							demuxer->set_write_ip_handler(
 								std::bind(&avpn_acceptor::ip_packet, shared_from_this(),
-									std::placeholders::_1, std::placeholders::_2));
+									std::placeholders::_1));
 							m_demultiplexer[endp] = demuxer;
 						}
 					}
@@ -115,8 +115,9 @@ namespace avpncore {
 			}
 		}
 
-		void ip_packet(const endpoint_pair& endp, ip_buffer buffer)
+		void ip_packet(ip_buffer buffer)
 		{
+			const auto& endp = buffer.endp_;
 			if (buffer.empty())			// 连接已经销毁, 传过来空包.
 			{
 				remove_stream(endp);

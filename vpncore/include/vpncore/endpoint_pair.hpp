@@ -38,11 +38,12 @@ namespace avpncore {
 			return type_ < 0;
 		}
 
-		void reserve()
+		endpoint_pair& reserve()
 		{
 			auto tmp = src_;
 			src_ = dst_;
 			dst_ = tmp;
+			return *this;
 		}
 
 		std::string to_string() const

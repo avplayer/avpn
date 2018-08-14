@@ -6,9 +6,17 @@
 #include <boost/smart_ptr/local_shared_ptr.hpp>
 #include <boost/smart_ptr/make_local_shared.hpp>
 
+#include "vpncore/endpoint_pair.hpp"
 #include "vpncore/logging.hpp"
 
 namespace avpncore {
+
+	// see https://www.iana.org/assignments/protocol-numbers/protocol-numbers.txt
+	enum ip_type
+	{
+		ip_tcp = 0x06,
+		ip_udp = 0x11,
+	};
 
 	// 定义IP包数据缓存结构, 这个结构允许
 	// 自己管理自己的内存, 使用 boost::local_shared_ptr 来管理
@@ -30,6 +38,12 @@ namespace avpncore {
 		ip_buffer(int len)
 			: buf_(new uint8_t[len])
 			, len_(len)
+		{}
+
+		ip_buffer(int len, endpoint_pair& endp)
+			: buf_(new uint8_t[len])
+			, len_(len)
+			, endp_(endp)
 		{}
 
 		void assign(uint8_t* p, int len)
@@ -64,13 +78,8 @@ namespace avpncore {
 
 		boost::local_shared_ptr<uint8_t> buf_;
 		int len_;
-		int type_; // same as ip_type
+		endpoint_pair endp_;
 	};
 
-	enum ip_type
-	{
-		ip_tcp = 0x06,
-		ip_udp = 0x11,
-	};
 
 }
