@@ -69,6 +69,15 @@ namespace socks {
 
 			/// SOCKS no identd running.
 			socks_identd_error,
+
+			/// request rejected or failed.
+			socks_request_rejected_or_failed,
+
+			/// request rejected becasue SOCKS server cannot connect to identd on the client.
+			socks_request_rejected_cannot_connect,
+
+			/// request rejected because the client program and identd report different user - ids
+			socks_request_rejected_incorrect_userid,
 		};
 
 		inline boost::system::error_code make_error_code(errc_t e)
@@ -104,7 +113,13 @@ namespace socks {
 			case errc::socks_no_identd:
 				return "SOCKS no identd running";
 			case errc::socks_identd_error:
-				return "SOCKS no identd running";
+				return "SOCKS identd error";
+			case errc::socks_request_rejected_or_failed:
+				return "request rejected or failed";
+			case errc::socks_request_rejected_cannot_connect:
+				return "request rejected becasue SOCKS server cannot connect to identd on the client";
+			case errc::socks_request_rejected_incorrect_userid:
+				return "request rejected because the client program and identd report different user";
 			default:
 				return "Unknown PROXY error";
 			}
@@ -787,7 +802,76 @@ namespace socks {
 		template <typename Handler>
 		void do_socks4(Handler handler, boost::asio::yield_context yield)
 		{
-			boost::system::error_code ec = errc::socks_unsupported_version;
+			boost::system::error_code ec;
+
+			boost::asio::streambuf request;
+			std::size_t bytes_to_write = 9 + m_socks_address.username.size();
+			boost::asio::mutable_buffer b = request.prepare(bytes_to_write);
+			auto wp = boost::asio::buffer_cast<char*>(b);
+
+			write_uint8(4, wp); // SOCKS VERSION 5.
+			write_uint8(1, wp); // CONNECT.
+
+			write_uint16(static_cast<uint16_t>(std::atoi(m_port.c_str())), wp); // DST PORT.
+
+			auto address = boost::asio::ip::address_v4::from_string(m_address, ec);
+			if (ec)
+			{
+				handler_(ec);
+				return;
+			}
+			write_uint32(address.to_uint(), wp); // DST IP.
+
+			if (!m_socks_address.username.empty())
+			{
+				std::copy(m_socks_address.username.begin(), m_socks_address.username.end(), wp);    // USERID
+				wp += m_socks_address.username.size();
+			}
+			write_uint8(0, wp); // NULL.
+
+			request.commit(bytes_to_write);
+			boost::asio::async_write(m_socket, request,
+				boost::asio::transfer_exactly(bytes_to_write), yield[ec]);
+			if (ec)
+			{
+				handler_(ec);
+				return;
+			}
+
+			boost::asio::streambuf response;
+			boost::asio::async_read(m_socket, response,
+				boost::asio::transfer_exactly(8), yield[ec]);
+			if (ec)
+			{
+				handler_(ec);
+				return;
+			}
+
+			boost::asio::const_buffer cb = response.data();
+			auto rp = boost::asio::buffer_cast<const char*>(cb);
+
+			read_uint8(rp); // VN is the version of the reply code and should be 0.
+			auto cd = read_uint8(rp);
+
+			if (cd != SOCKS4_REQUEST_GRANTED)
+			{
+				switch (cd)
+				{
+				case SOCKS4_REQUEST_REJECTED_OR_FAILED:
+					ec = errc::socks_request_rejected_or_failed;
+					break;
+				case SOCKS4_CANNOT_CONNECT_TARGET_SERVER:
+					ec = errc::socks_request_rejected_cannot_connect;
+					break;
+				case SOCKS4_REQUEST_REJECTED_USER_NO_ALLOW:
+					ec = errc::socks_request_rejected_incorrect_userid;
+					break;
+				default:
+					ec = errc::socks_general_failure;
+					break;
+				}
+			}
+
 			handler(ec);
 			return;
 		}
