@@ -164,7 +164,10 @@ include_directories(
 if (WIN32)
 	link_libraries(Secur32.lib)
 elseif(UNIX AND NOT APPLE)
-	link_libraries(systemd mnl netlink)
+	link_libraries(mnl netlink)
+	if (ENABLE_USE_SYSTEMD_LOGGING)
+		link_libraries(systemd)
+	endif()
 endif()
 
 link_libraries(
