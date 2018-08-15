@@ -817,7 +817,7 @@ namespace socks {
 			auto address = boost::asio::ip::address_v4::from_string(m_address, ec);
 			if (ec)
 			{
-				handler_(ec);
+				handler(ec);
 				return;
 			}
 			write_uint32(address.to_uint(), wp); // DST IP.
@@ -834,7 +834,7 @@ namespace socks {
 				boost::asio::transfer_exactly(bytes_to_write), yield[ec]);
 			if (ec)
 			{
-				handler_(ec);
+				handler(ec);
 				return;
 			}
 
@@ -843,7 +843,7 @@ namespace socks {
 				boost::asio::transfer_exactly(8), yield[ec]);
 			if (ec)
 			{
-				handler_(ec);
+				handler(ec);
 				return;
 			}
 
