@@ -42,9 +42,11 @@
 #	pragma comment(lib, "Winmm.lib")
 #endif // _WIN32
 
+#ifdef USE_SYSTEMD_LOGGING
 #ifdef __linux__
 #	include <systemd/sd-journal.h>
 #endif // __linux__
+#endif
 
 namespace logging {
 

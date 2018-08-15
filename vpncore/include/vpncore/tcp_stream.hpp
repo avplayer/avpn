@@ -328,7 +328,7 @@ namespace avpncore {
 				if (m_tsm.state_ == tcp_state::ts_invalid && m_accept_handler)
 				{
 					m_accept_handler(boost::asio::error::network_reset);
-					m_accept_handler.swap(accept_handler());
+					m_accept_handler = nullptr;
 				}
 				m_tsm.state_ = tcp_state::ts_closed;
 				LOG_DBG << m_endp << " " << tcp_state_string(last_state) << " -> flags.flag.rst";
@@ -369,7 +369,7 @@ namespace avpncore {
 					if (m_accept_handler)
 					{
 						m_accept_handler(boost::asio::error::network_reset);
-						m_accept_handler.swap(accept_handler());
+						m_accept_handler = nullptr;
 					}
 					reset();
 					return;
@@ -382,7 +382,7 @@ namespace avpncore {
 				if (m_accept_handler)
 				{
 					m_accept_handler(ec);
-					m_accept_handler.swap(accept_handler());
+					m_accept_handler = nullptr;
 				}
 				return;	// 直接返回, 由用户层确认是否接受连接回复syn ack.
 			}
