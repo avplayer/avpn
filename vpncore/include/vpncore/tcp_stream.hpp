@@ -197,14 +197,13 @@ namespace avpncore {
 			}
 			else if (state == ac_deny)
 			{
-				flags.flag.syn = 1;
-				flags.flag.fin = 1;
+				flags.flag.rst = 1;
+				flags.flag.ack = 1;
 				do_close();
 			}
 			else
 			{
 				flags.flag.ack = 1;
-				flags.flag.syn = 1;
 				flags.flag.rst = 1;
 				do_close();
 			}
