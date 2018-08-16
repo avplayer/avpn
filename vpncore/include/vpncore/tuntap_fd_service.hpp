@@ -56,18 +56,19 @@ static const char			drv_name[] = "tun";
 
 #endif
 
-#include "boost/asio/io_context.hpp"
-#include "boost/thread.hpp"
-#include "boost/bind.hpp"
-#include "boost/smart_ptr/scoped_ptr.hpp"
-#include "boost/smart_ptr/local_shared_ptr.hpp"
-#include "boost/smart_ptr/make_local_shared.hpp"
+#include <boost/asio/io_context.hpp>
+#include <boost/asio/posix/stream_descriptor.hpp>
+
+#include <boost/smart_ptr/scoped_ptr.hpp>
+#include <boost/smart_ptr/local_shared_ptr.hpp>
+#include <boost/smart_ptr/make_local_shared.hpp>
 
 #include "vpncore/logging.hpp"
 #include "vpncore/tuntap_config.hpp"
 
 
 namespace tuntap_service {
+	namespace posix = boost::asio::posix;
 
 	template <typename ReturnType>
 	inline ReturnType error_wrapper(ReturnType return_value,
@@ -141,10 +142,6 @@ namespace tuntap_service {
 
 		explicit tuntap_fd_service(boost::asio::io_context& io_context)
 			: boost::asio::io_context::service(io_context)
-			, m_work_context()
-			, m_work(boost::asio::make_work_guard(m_work_context))
-			, m_work_thread(new boost::thread(
-				boost::bind(&boost::asio::io_context::run, &m_work_context)))
 			, m_tuntap_fd(0)
 		{
 			// 程序开始时获取tuntap列表.
@@ -153,10 +150,6 @@ namespace tuntap_service {
 
 		~tuntap_fd_service()
 		{
-			m_work.reset();
-			if (m_work_thread)
-				m_work_thread->join();
-
 		}
 
 		void shutdown_service()
@@ -273,6 +266,9 @@ namespace tuntap_service {
 //				return false;
 //			}
 
+			m_stream_descriptor = boost::make_local_shared<posix::stream_descriptor>(
+				this->get_io_context(), fd);
+
 			m_tuntap_fd = fd;
 
 			LOG_DBG << "TUN / TAP device " << ifr.ifr_name << " successd, " << fd;
@@ -293,86 +289,17 @@ namespace tuntap_service {
 #endif
 		}
 
-		class avpn_async_operation {
-		public:
-			virtual void do_work() = 0;
-			tuntap_fd_service* self_;
-			int fd_;
-		};
-
-		void start_async_op(avpn_async_operation *op)
-		{
-			op->do_work();
-		}
-
-		template <typename MutableBufferSequence, typename ReadHandler>
-		class async_read_op : public avpn_async_operation
-		{
-		public:
-			async_read_op(const MutableBufferSequence& buffers, ReadHandler& handler)
-				: buffers_(buffers)
-				, handler_(BOOST_ASIO_MOVE_CAST(ReadHandler)(handler))
-			{}
-
-			virtual void do_work()
-			{
-				std::size_t bytes_transferred = 0;
-				boost::system::error_code ec;
-
-				auto nbytes = buffers_.size();
-				auto buf = boost::asio::buffer_cast<void*>(buffers_);
-
-				// Read some data.
-				for (;;)
-				{
-					// Try to complete the operation without blocking.
-					errno = 0;
-					bytes_transferred = error_wrapper(::read(
-						fd_, buf, static_cast<unsigned int>(nbytes)), ec);
-
-					// Check if operation succeeded.
-					if (bytes_transferred > 0)
-						break;
-
-					// Check for EOF.
-					if (bytes_transferred == 0)
-					{
-						// same try again, linux tun api is ugly, so...
-						ec = boost::system::error_code();
-						break;
-					}
-
-					// Operation failed.
-					if ((ec != boost::asio::error::would_block
-							&& ec != boost::asio::error::try_again))
-						break;
-				}
-
-				self_->get_io_context().dispatch(boost::bind(
-					&async_read_op<MutableBufferSequence, ReadHandler>::do_complete,
-						this, ec, bytes_transferred));
-			}
-
-			void do_complete(const boost::system::error_code& ec,
-				std::size_t bytes_transferred)
-			{
-				handler_(ec, bytes_transferred);
-				delete this;
-			}
-
-			MutableBufferSequence buffers_;
-			ReadHandler handler_;
-		};
-
 		template <typename MutableBufferSequence, typename ReadHandler>
 		void start_async_read(const MutableBufferSequence& buffers, ReadHandler& handler)
 		{
-			typedef async_read_op<MutableBufferSequence, ReadHandler> op;
-			avpn_async_operation *p = new op(buffers, handler);
-			p->self_ = this;
-			p->fd_ = m_tuntap_fd;
-			m_work_context.post(
-				boost::bind(&tuntap_fd_service::start_async_op, this, p));
+			m_stream_descriptor->async_read_some(buffers, [this]
+			(boost::system::error_code error, std::size_t bytes_transferred)
+			{
+				boost::system::error_code ec;
+				if (error = boost::asio::error::eof))
+					ec = error;
+				handler(ec, bytes_transferred);
+			});
 		}
 
 		template <typename MutableBufferSequence, typename ReadHandler>
@@ -392,73 +319,16 @@ namespace tuntap_service {
 		}
 
 		template <typename ConstBufferSequence, typename WriteHandler>
-		class async_write_op : public avpn_async_operation
-		{
-		public:
-			async_write_op(const ConstBufferSequence& buffers, WriteHandler& handler)
-				: buffers_(buffers)
-				, handler_(BOOST_ASIO_MOVE_CAST(WriteHandler)(handler))
-			{}
-
-			virtual void do_work()
-			{
-				std::size_t bytes_transferred = 0;
-				boost::system::error_code ec;
-
-				auto nbytes = buffers_.size();
-				auto buf = boost::asio::buffer_cast<const void*>(buffers_);
-
-				// Read some data.
-				for (;;)
-				{
-					// Try to complete the operation without blocking.
-					errno = 0;
-					bytes_transferred = error_wrapper(::write(fd_,
-						buf, static_cast<unsigned int>(nbytes)), ec);
-
-					// Check if operation succeeded.
-					if (bytes_transferred > 0)
-						break;
-
-					// Check for EOF.
-					if (bytes_transferred == 0)
-					{
-						// same try again, linux tun api is ugly, so...
-						ec = boost::system::error_code(); // same try_again
-						break;
-					}
-
-					// Operation failed.
-					if ((ec != boost::asio::error::would_block
-						&& ec != boost::asio::error::try_again))
-						break;
-				}
-
-				self_->get_io_context().dispatch(boost::bind(
-					&async_write_op<ConstBufferSequence, WriteHandler>::do_complete,
-						this, ec, bytes_transferred));
-			}
-
-			void do_complete(const boost::system::error_code& ec,
-				std::size_t bytes_transferred)
-			{
-				handler_(ec, bytes_transferred);
-				delete this;
-			}
-
-			ConstBufferSequence buffers_;
-			WriteHandler handler_;
-		};
-
-		template <typename ConstBufferSequence, typename WriteHandler>
 		void start_async_write(const ConstBufferSequence& buffers, WriteHandler& handler)
 		{
-			typedef async_write_op<ConstBufferSequence, WriteHandler> op;
-			avpn_async_operation *p = new op(buffers, handler);
-			p->self_ = this;
-			p->fd_ = m_tuntap_fd;
-			m_work_context.post(
-				boost::bind(&tuntap_fd_service::start_async_op, this, p));
+			m_stream_descriptor->async_write_some(buffers, [this]
+			(boost::system::error_code error, std::size_t bytes_transferred)
+			{
+				boost::system::error_code ec;
+				if (error = boost::asio::error::eof))
+				ec = error;
+				handler(ec, bytes_transferred);
+			});
 		}
 
 		template <typename ConstBufferSequence, typename WriteHandler>
@@ -589,10 +459,7 @@ namespace tuntap_service {
 		}
 
 	private:
-		boost::asio::io_context m_work_context; // 用于模拟事件机制.
-		boost::asio::executor_work_guard<
-			boost::asio::io_context::executor_type> m_work;
-		boost::scoped_ptr<boost::thread> m_work_thread;
+		boost::local_shared_ptr<posix::stream_descriptor> m_stream_descriptor;
 		std::vector<device_tuntap> m_device_list;
 		dev_config m_config;
 		int m_frame_mtu;
