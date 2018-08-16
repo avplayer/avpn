@@ -214,7 +214,8 @@ namespace avpncore {
 			m_tsm.lseq_ += 1;
 
 			// 更新为syn包已经发送的状态.
-			m_tsm.state_ = tcp_state::ts_syn_sent;
+			if (state != ac_deny)
+				m_tsm.state_ = tcp_state::ts_syn_sent;
 
 			// 回调写回数据.
 			m_write_ip_handler(buffer);
