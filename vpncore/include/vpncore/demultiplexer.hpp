@@ -65,6 +65,12 @@ namespace avpncore {
 			m_backlog.push_back(stream);
 		}
 
+		using udp_handler = std::function<void(ip_buffer& buf)>;
+		void accept_udp(udp_handler handler)
+		{
+			m_udp_handler = handler;
+		}
+
 		void remove_stream(const endpoint_pair& pair)
 		{
 			m_tcp_conntrack.erase(pair);
@@ -92,7 +98,14 @@ namespace avpncore {
 				auto buf = boost::asio::buffer_cast<const uint8_t*>(buffer.data());
 				auto endp = lookup_endpoint_pair(buf, bytes);
 
-				if (!endp.empty())
+				// 解析不出来的ip包, 直接跳过.
+				if (endp.empty())
+				{
+					buffer.consume(bytes);
+					continue;
+				}
+
+				if (endp.type_ == ip_tcp)
 				{
 					auto demuxer = lookup_stream(endp);
 					if (!demuxer)
@@ -109,6 +122,17 @@ namespace avpncore {
 					}
 					if (demuxer)
 						demuxer->output(buf, bytes);
+				}
+				else if (endp.type_ == ip_udp)
+				{
+					if (m_udp_handler)
+					{
+						ip_buffer ip;
+						ip.assign(buf, bytes);
+						ip.endp_ = endp;
+
+						m_udp_handler(ip);
+					}
 				}
 
 				buffer.consume(bytes);
@@ -182,6 +206,21 @@ namespace avpncore {
 
 				return endp;
 			}
+			else if (type == ip_udp)
+			{
+				auto p = buf + ihl;
+
+				uint16_t src_port = (*(uint16_t*)(p + 0));
+				uint16_t dst_port = (*(uint16_t*)(p + 2));
+
+				auto udp_len = *(uint16_t*)(p + 4);
+				// auto chksum = *(uint16_t*)(p + 6);	// skip chksum.
+
+				endpoint_pair endp(src_ip, src_port, dst_ip, dst_port);
+				endp.type_ = type;
+
+				return endp;
+			}
 
 			return endpoint_pair();
 		}
@@ -233,6 +272,7 @@ namespace avpncore {
 		std::unordered_map<endpoint_pair, tcp_stream*> m_tcp_conntrack;
 		std::vector<tcp_stream*> m_backlog;
 		std::deque<ip_buffer> m_queue;
+		udp_handler m_udp_handler;
 		bool m_abort;
 	};
 
