@@ -292,11 +292,11 @@ namespace tuntap_service {
 		template <typename MutableBufferSequence, typename ReadHandler>
 		void start_async_read(const MutableBufferSequence& buffers, ReadHandler& handler)
 		{
-			m_stream_descriptor->async_read_some(buffers, [this]
+			m_stream_descriptor->async_read_some(buffers, [this, handler]
 			(boost::system::error_code error, std::size_t bytes_transferred)
 			{
 				boost::system::error_code ec;
-				if (error = boost::asio::error::eof))
+				if (error = boost::asio::error::eof)
 					ec = error;
 				handler(ec, bytes_transferred);
 			});
@@ -321,11 +321,11 @@ namespace tuntap_service {
 		template <typename ConstBufferSequence, typename WriteHandler>
 		void start_async_write(const ConstBufferSequence& buffers, WriteHandler& handler)
 		{
-			m_stream_descriptor->async_write_some(buffers, [this]
+			m_stream_descriptor->async_write_some(buffers, [this, handler]
 			(boost::system::error_code error, std::size_t bytes_transferred)
 			{
 				boost::system::error_code ec;
-				if (error = boost::asio::error::eof))
+				if (error = boost::asio::error::eof)
 				ec = error;
 				handler(ec, bytes_transferred);
 			});
