@@ -15,7 +15,7 @@
 
 #include "vpncore/logging.hpp"
 #include "vpncore/tuntap.hpp"
-#include "vpncore/avpn_acceptor.hpp"
+#include "vpncore/demultiplexer.hpp"
 #include "vpncore/tcp_stream.hpp"
 #include "vpncore/socks_client.hpp"
 
@@ -82,7 +82,7 @@ namespace avpncore {
 		bool start(const std::string& local, const std::string& mask,
 			const std::string& socks_server)
 		{
-			m_avpn_acceptor = boost::make_shared<avpn_acceptor>(
+			m_demultiplexer = boost::make_shared<demultiplexer>(
 				std::ref(m_io_context), std::ref(m_dev));
 
 			for (auto i = 0; i < 40; i++)
@@ -91,11 +91,11 @@ namespace avpncore {
 				m_tcp_streams[ts] = ts->self();
 
 				m_num_ready++;
-				m_avpn_acceptor->async_accept(ts);
+				m_demultiplexer->async_accept(ts);
 			}
 
 			m_socks_server = socks_server;
-			m_avpn_acceptor->start();
+			m_demultiplexer->start();
 
 			// 同时启动定时器.
 			start_timer();
@@ -106,9 +106,9 @@ namespace avpncore {
 		{
 			tcp_stream* new_ts = make_tcp_stream();
 			m_tcp_streams[new_ts] = new_ts->self();
-			m_avpn_acceptor->async_accept(new_ts);
+			m_demultiplexer->async_accept(new_ts);
 
-			LOG_DBG << "current num backlog: " << m_avpn_acceptor->num_backlog();
+			LOG_DBG << "current num backlog: " << m_demultiplexer->num_backlog();
 
 			if (ec)
 			{
@@ -179,7 +179,7 @@ namespace avpncore {
 		void close_handler(tcp_stream* ts, const boost::system::error_code& ec)
 		{
 			LOG_DBG << ts->tcp_endpoint_pair() << " destroy stream.";
-			m_avpn_acceptor->remove_stream(ts->tcp_endpoint_pair());
+			m_demultiplexer->remove_stream(ts->tcp_endpoint_pair());
 			m_tcp_streams.erase(ts);
 		}
 
@@ -310,7 +310,7 @@ namespace avpncore {
 		boost::asio::io_context& m_io_context;
 		tuntap& m_dev;
 		boost::asio::steady_timer m_timer{ m_io_context };
-		boost::local_shared_ptr<avpn_acceptor> m_avpn_acceptor;
+		boost::local_shared_ptr<demultiplexer> m_demultiplexer;
 		std::unordered_map<tcp_stream*, tcp_stream_ptr> m_tcp_streams;
 		int m_num_ready;
 		int m_num_using;

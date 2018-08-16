@@ -31,28 +31,28 @@ namespace avpncore {
 	// 分析ip流, 根据ip流的 endpoint_pair
 	// 转发到对应的tcp流模块.
 	// 如果不存在, 则创建对应的模块.
-	class avpn_acceptor : public boost::enable_shared_from_this<avpn_acceptor>
+	class demultiplexer : public boost::enable_shared_from_this<demultiplexer>
 	{
 		// c++11 noncopyable.
-		avpn_acceptor(const avpn_acceptor&) = delete;
-		avpn_acceptor& operator=(const avpn_acceptor&) = delete;
+		demultiplexer(const demultiplexer&) = delete;
+		demultiplexer& operator=(const demultiplexer&) = delete;
 
 	public:
-		avpn_acceptor(boost::asio::io_context& io_context,
+		demultiplexer(boost::asio::io_context& io_context,
 			tuntap& input)
 			: m_io_context(io_context)
 			, m_input(input)
 			, m_abort(false)
 		{}
 
-		~avpn_acceptor()
+		~demultiplexer()
 		{}
 
 		// 开始工作.
 		void start()
 		{
  			m_io_context.post(std::bind(
- 				&avpn_acceptor::start_work, shared_from_this()));
+ 				&demultiplexer::start_work, shared_from_this()));
 		}
 
 		void stop()
@@ -62,17 +62,17 @@ namespace avpncore {
 
 		void async_accept(tcp_stream* stream)
 		{
-			m_accept_list.push_back(stream);
+			m_backlog.push_back(stream);
 		}
 
 		void remove_stream(const endpoint_pair& pair)
 		{
-			m_demultiplexer.erase(pair);
+			m_tcp_conntrack.erase(pair);
 		}
 
 		std::size_t num_backlog() const
 		{
-			return m_accept_list.size();
+			return m_backlog.size();
 		}
 
 	protected:
@@ -97,14 +97,14 @@ namespace avpncore {
 					auto demuxer = lookup_stream(endp);
 					if (!demuxer)
 					{
-						if (!m_accept_list.empty())
+						if (!m_backlog.empty())
 						{
-							demuxer = m_accept_list.back();
-							m_accept_list.pop_back();
+							demuxer = m_backlog.back();
+							m_backlog.pop_back();
 							demuxer->set_write_ip_handler(
-								std::bind(&avpn_acceptor::ip_packet, shared_from_this(),
+								std::bind(&demultiplexer::ip_packet, shared_from_this(),
 									std::placeholders::_1));
-							m_demultiplexer[endp] = demuxer;
+							m_tcp_conntrack[endp] = demuxer;
 						}
 					}
 					if (demuxer)
@@ -150,14 +150,14 @@ namespace avpncore {
 			if (!write_in_progress)
 			{
 				boost::asio::spawn(m_io_context, std::bind(
-					&avpn_acceptor::write_ip_packet, shared_from_this(), std::placeholders::_1));
+					&demultiplexer::write_ip_packet, shared_from_this(), std::placeholders::_1));
 			}
 		}
 
 		tcp_stream* lookup_stream(const endpoint_pair& endp)
 		{
-			auto it = m_demultiplexer.find(endp);
-			if (it == m_demultiplexer.end())
+			auto it = m_tcp_conntrack.find(endp);
+			if (it == m_tcp_conntrack.end())
 				return nullptr;
 			return it->second;
 		}
@@ -230,8 +230,8 @@ namespace avpncore {
 	private:
 		boost::asio::io_context& m_io_context;
 		tuntap& m_input;
-		std::unordered_map<endpoint_pair, tcp_stream*> m_demultiplexer;
-		std::vector<tcp_stream*> m_accept_list;
+		std::unordered_map<endpoint_pair, tcp_stream*> m_tcp_conntrack;
+		std::vector<tcp_stream*> m_backlog;
 		std::deque<ip_buffer> m_queue;
 		bool m_abort;
 	};
