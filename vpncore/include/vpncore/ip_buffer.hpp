@@ -46,7 +46,7 @@ namespace avpncore {
 			, endp_(endp)
 		{}
 
-		void assign(uint8_t* p, int len)
+		void assign(const uint8_t* p, int len)
 		{
 			buf_.reset(new uint8_t[len]);
 			std::memcpy(buf_.get(), p, len);
