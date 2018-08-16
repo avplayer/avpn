@@ -143,6 +143,7 @@ namespace tuntap_service {
 		explicit tuntap_fd_service(boost::asio::io_context& io_context)
 			: boost::asio::io_context::service(io_context)
 			, m_tuntap_fd(0)
+			, m_stream_descriptor(io_context)
 		{
 			// 程序开始时获取tuntap列表.
 			fetch_tuntap();
@@ -260,14 +261,13 @@ namespace tuntap_service {
 			memcpy(m_mac_addr.data(), ifr.ifr_hwaddr.sa_data, 6);
 
 			// 设置fd为非阻塞.
-//			if (fcntl(fd, F_SETFL, O_NONBLOCK) < 0)
-//			{
-//				::close(fd);
-//				return false;
-//			}
+			if (fcntl(fd, F_SETFL, O_NONBLOCK) < 0)
+			{
+				::close(fd);
+				return false;
+			}
 
-			m_stream_descriptor = boost::make_local_shared<posix::stream_descriptor>(
-				this->get_io_context(), fd);
+			m_stream_descriptor.assign(fd);
 
 			m_tuntap_fd = fd;
 
@@ -292,11 +292,11 @@ namespace tuntap_service {
 		template <typename MutableBufferSequence, typename ReadHandler>
 		void start_async_read(const MutableBufferSequence& buffers, ReadHandler& handler)
 		{
-			m_stream_descriptor->async_read_some(buffers, [this, handler]
+			m_stream_descriptor.async_read_some(buffers, [this, handler]
 			(boost::system::error_code error, std::size_t bytes_transferred) mutable
 			{
 				boost::system::error_code ec;
-				if (error = boost::asio::error::eof)
+				if (error == boost::asio::error::eof)
 					ec = error;
 				handler(ec, bytes_transferred);
 			});
@@ -321,11 +321,11 @@ namespace tuntap_service {
 		template <typename ConstBufferSequence, typename WriteHandler>
 		void start_async_write(const ConstBufferSequence& buffers, WriteHandler& handler)
 		{
-			m_stream_descriptor->async_write_some(buffers, [this, handler]
+			m_stream_descriptor.async_write_some(buffers, [this, handler]
 			(boost::system::error_code error, std::size_t bytes_transferred) mutable
 			{
 				boost::system::error_code ec;
-				if (error = boost::asio::error::eof)
+				if (error == boost::asio::error::eof)
 					ec = error;
 				handler(ec, bytes_transferred);
 			});
@@ -459,7 +459,7 @@ namespace tuntap_service {
 		}
 
 	private:
-		boost::local_shared_ptr<posix::stream_descriptor> m_stream_descriptor;
+		posix::stream_descriptor m_stream_descriptor;
 		std::vector<device_tuntap> m_device_list;
 		dev_config m_config;
 		int m_frame_mtu;
