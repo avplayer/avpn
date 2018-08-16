@@ -5,8 +5,6 @@
 )
 
 file(GLOB vpncore_SRCS
-	src/*.cpp
-	src/*.c
 	include/vpncore/*.hpp
 	include/vpncore/*.h
 )

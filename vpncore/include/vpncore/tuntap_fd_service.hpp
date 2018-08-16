@@ -130,18 +130,17 @@ namespace tuntap_service {
 	}
 
 	class tuntap_fd_service
-		: public boost::asio::io_context::service
+		: public boost::asio::detail::service_base<tuntap_fd_service>
 	{
 		// c++11 noncopyable.
 		tuntap_fd_service(const tuntap_fd_service&) = delete;
 		tuntap_fd_service& operator=(const tuntap_fd_service&) = delete;
 
 	public:
-		static boost::asio::io_context::id id;
 		typedef tuntap_fd_service* impl_type;
 
 		explicit tuntap_fd_service(boost::asio::io_context& io_context)
-			: boost::asio::io_context::service(io_context)
+			: boost::asio::detail::service_base<tuntap_fd_service>(io_context)
 			, m_tuntap_fd(0)
 			, m_stream_descriptor(io_context)
 		{

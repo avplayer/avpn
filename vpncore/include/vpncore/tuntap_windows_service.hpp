@@ -134,18 +134,17 @@ namespace tuntap_service {
 	}
 
 	class tuntap_windows_service
-		: public boost::asio::io_context::service
+		: public boost::asio::detail::service_base<tuntap_windows_service>
 	{
 		// c++11 noncopyable.
 		tuntap_windows_service(const tuntap_windows_service&) = delete;
 		tuntap_windows_service& operator=(const tuntap_windows_service&) = delete;
 
 	public:
-		static boost::asio::io_context::id id;
 		typedef tuntap_windows_service* impl_type;
 
 		explicit tuntap_windows_service(boost::asio::io_context& io_context)
-			: boost::asio::io_context::service(io_context)
+			: boost::asio::detail::service_base<tuntap_windows_service>(io_context)
 			, m_io_handle(io_context)
 			, m_handle(INVALID_HANDLE_VALUE)
 		{
@@ -552,5 +551,4 @@ namespace tuntap_service {
 		std::vector<uint8_t> m_mac_addr;
 		boost::asio::windows::random_access_handle m_io_handle;
 	};
-
 }
