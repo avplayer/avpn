@@ -1,6 +1,5 @@
 boost 提供最强大的c++编程能力.
 fmt 用于日志格式化等.
-lwip 用于tcp/ip协议解析.
 openssl 用于加密.
 zlib 用于压缩.
 
