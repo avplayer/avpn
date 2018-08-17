@@ -63,6 +63,9 @@ namespace avpncore {
 			, m_dev(dev)
 			, m_num_ready(0)
 			, m_num_using(0)
+			, m_dns_index(0)
+			, m_udp_socks(io)
+			, m_udp_socket(io)
 		{
 		}
 
@@ -72,9 +75,9 @@ namespace avpncore {
 			tcp_stream* ts = new tcp_stream(m_io_context);
 
 			ts->set_closed_handler(
-				std::bind(&tun2socks::close_handler, this, ts, std::placeholders::_1));
+				std::bind(&tun2socks::handle_close, this, ts, std::placeholders::_1));
 			ts->set_accept_handler(
-				std::bind(&tun2socks::accept_handle, this, ts, std::placeholders::_1));
+				std::bind(&tun2socks::handle_accept, this, ts, std::placeholders::_1));
 
 			return ts;
 		}
@@ -84,6 +87,9 @@ namespace avpncore {
 		{
 			m_demultiplexer = boost::make_shared<demultiplexer>(
 				std::ref(m_io_context), std::ref(m_dev));
+
+			m_demultiplexer->accept_udp(std::bind(&tun2socks::handle_udp,
+				this, std::placeholders::_1));
 
 			for (auto i = 0; i < 40; i++)
 			{
@@ -97,12 +103,76 @@ namespace avpncore {
 			m_socks_server = socks_server;
 			m_demultiplexer->start();
 
+			// 启动udp转发socks.
+			boost::asio::spawn(m_io_context,
+			[this] (boost::asio::yield_context yield) mutable
+			{
+				using namespace socks;
+				boost::system::error_code ec;
+				socks_address socks_addr;
+				boost::asio::steady_timer timer{ m_io_context };
+
+				while (true)
+				{
+					if (!connect_socks(yield, m_udp_socks, m_socks_server, socks_addr))
+					{
+						timer.expires_from_now(std::chrono::minutes(1));
+						timer.async_wait(yield[ec]);
+						continue;
+					}
+
+					boost::system::error_code ignore_ec;
+					m_udp_socks.set_option(tcp::no_delay(true), ignore_ec);
+
+					// 配置参数.
+					socks_addr.proxy_hostname = false;
+					socks_addr.proxy_address = "0.0.0.0";
+					socks_addr.proxy_port = std::to_string(m_udp_socks.remote_endpoint().port());
+					socks_addr.udp_associate = true;
+
+					auto udpsocks = boost::make_local_shared<socks::socks_client>(std::ref(m_udp_socks));
+					udpsocks->async_do_proxy(socks_addr,
+					[this, udpsocks](const boost::system::error_code& err)
+					{
+						if (err)
+						{
+							LOG_ERR << "socks async_do_proxy udp error: " << err.message();
+							return;
+						}
+
+						// 获取 udp socket 服务器udp转发endpoint.
+						m_udp_remote_endp = udpsocks->udp_endpoint();
+						LOG_DBG << "* SOCKS5, udp associate: " << m_udp_remote_endp;
+
+						boost::system::error_code ec;
+						m_udp_socket.open(m_udp_remote_endp.protocol(), ec);
+						m_udp_socket.bind(udp::endpoint(m_udp_remote_endp.protocol(), 0), ec);
+
+						// 开始接收数据.
+						for (int i = 0; i < MAX_RECV_BUFFER_SIZE; i++)
+						{
+							auto& recv_buf = m_udp_recv_buffers[i];
+							boost::array<char, 2048>& buf = recv_buf.buffer;
+							m_udp_socket.async_receive_from(boost::asio::buffer(buf), recv_buf.endp,
+								boost::bind(&tun2socks::socks_handle_udp_read, this,
+									i,
+									boost::asio::placeholders::error,
+									boost::asio::placeholders::bytes_transferred
+								)
+							);
+						}
+					});
+				}
+
+				keep_udp_socket();
+			});
+
 			// 同时启动定时器.
 			start_timer();
 			return true;
 		}
 
-		void accept_handle(tcp_stream* ts, const boost::system::error_code& ec)
+		void handle_accept(tcp_stream* ts, const boost::system::error_code& ec)
 		{
 			tcp_stream* new_ts = make_tcp_stream();
 			m_tcp_streams[new_ts] = new_ts->self();
@@ -176,7 +246,7 @@ namespace avpncore {
 			});
 		}
 
-		void close_handler(tcp_stream* ts, const boost::system::error_code& ec)
+		void handle_close(tcp_stream* ts, const boost::system::error_code& ec)
 		{
 			LOG_DBG << ts->tcp_endpoint_pair() << " destroy stream.";
 			m_demultiplexer->remove_stream(ts->tcp_endpoint_pair());
@@ -217,7 +287,6 @@ namespace avpncore {
 					if (ec)
 					{
 						LOG_DBG << ts->tcp_endpoint_pair() << " read socks " << ec.message();
-						socks.shutdown(boost::asio::ip::tcp::socket::shutdown_receive, ec);
 						break;
 					}
 					buffer.commit(bytes);
@@ -227,12 +296,12 @@ namespace avpncore {
 					auto ret = ts->write((uint8_t*)p, bytes);
 					if (ret < 0)
 					{
-						socks.shutdown(boost::asio::ip::tcp::socket::shutdown_send, ec);
 						break;
 					}
 					buffer.consume(ret);
 				}
 
+				socks.shutdown(boost::asio::ip::tcp::socket::shutdown_receive, ec);
 				ts->close();
 				LOG_DBG << ts->tcp_endpoint_pair() << " 1. read socks total: "
 					<< total << ", leak data: " << buffer.size();
@@ -254,7 +323,6 @@ namespace avpncore {
 					int len = ts->read(b, 1024);
 					if (len < 0)
 					{
-						socks.shutdown(boost::asio::ip::tcp::socket::shutdown_receive, ec);
 						break;
 					}
 
@@ -275,15 +343,204 @@ namespace avpncore {
 					if (ec)
 					{
 						LOG_DBG << ts->tcp_endpoint_pair() << " write socks: " << ec.message();
-						socks.shutdown(boost::asio::ip::tcp::socket::shutdown_send, ec);
 						break;
 					}
 					buffer.consume(bytes);
 				}
 
+				socks.shutdown(boost::asio::ip::tcp::socket::shutdown_send, ec);
 				ts->close();
 				LOG_DBG << ts->tcp_endpoint_pair() << " 2. read local total: "
 					<< total << ", leak data: " << buffer.size();
+			});
+		}
+
+		void keep_udp_socket()
+		{
+			static char tmp[32];
+			boost::asio::async_read(m_udp_socks, boost::asio::buffer(tmp, 32),
+			[this](const boost::system::error_code& error, std::size_t)
+			{
+				if (error)
+				{
+					LOG_DBG << "udp socks is error: " << error.message();
+					return;
+				}
+
+				// keep udp socket.
+				keep_udp_socket();
+			});
+		}
+
+		void socks_handle_udp_read(int i,
+			const boost::system::error_code& error, std::size_t bytes_transferred)
+		{
+			if (error)
+			{
+				LOG_DBG << "socks5 udp socks recv error: " << error.message();
+				return;
+			}
+
+			udp_recv_buffer& recv_buf = m_udp_recv_buffers[i];
+			boost::array<char, 2048>& buf = recv_buf.buffer;
+
+			// process socks udp data and write to tun device.
+			boost::asio::ip::udp::endpoint src;
+			std::string data;
+
+			if (socks::socks_client::udp_unpacket(buf.data(), bytes_transferred, src, data))
+			{
+				auto ip_len = 28 + data.size();
+				ip_buffer buffer(ip_len);
+
+				uint8_t* ip_data = buffer.buf_.get();
+				uint8_t* p = ip_data;
+
+				*((uint8_t*)(p + 0)) = 0x45; // version
+				*((uint8_t*)(p + 1)) = 0x00; // tos
+				*((uint16_t*)(p + 2)) = htons(ip_len); // ip length
+				*((uint16_t*)(p + 4)) = htons(ip_len); // id
+				*((uint16_t*)(p + 6)) = 0x00;	// flag
+				*((uint8_t*)(p + 8)) = 0x30; // ttl
+				*((uint8_t*)(p + 9)) = 0x11; // protocol
+				*((uint16_t*)(p + 10)) = 0x00; // checksum
+
+				uint32_t src_addr = src.address().to_v4().to_ulong();
+				*((uint32_t*)(p + 12)) = htonl(src_addr); // source
+
+
+				// 是dns.
+				bool dns_found = false;
+				endpoint_pair pair;
+				boost::asio::ip::udp::endpoint local_endp;
+				if (src.port() == 53)
+				{
+					auto dns_id = *(uint16_t*)&data[0];
+					auto it = m_dnsmap.find(dns_id);
+					if (it != m_dnsmap.end())
+					{
+						pair = it->second;
+						pair.reserve();
+						local_endp = boost::asio::ip::udp::endpoint(pair.dst_.address(), pair.dst_.port());
+						*((uint32_t*)(p + 16)) = htonl(pair.dst_.address().to_v4().to_ulong()); // local/dest
+						dns_found = true;
+						m_dnsmap.erase(it);
+					}
+				}
+
+				// find local endp.
+				if (!dns_found)
+				{
+					uint64_t k = (src_addr << 2) + src.port();
+					auto it = m_portmap.find(k);
+					if (it != m_portmap.end())
+					{
+						local_endp = it->second.local_endp;
+						pair.src_ = boost::asio::ip::tcp::endpoint(src.address(), src.port());
+						pair.dst_ = boost::asio::ip::tcp::endpoint(local_endp.address(), local_endp.port());
+						it->second.tick = std::time(nullptr); // update time.
+						*((uint32_t*)(p + 16)) = htonl(local_endp.address().to_v4().to_ulong()); // local/dest
+					}
+					else
+					{
+						*((uint32_t*)(p + 16)) = 0x00; // local/dest
+					}
+				}
+
+				*((uint16_t*)(p + 10)) = standard_chksum(p, 20);// htons(sum); // ip header checksum
+
+				// udp header.
+				p = p + 20;
+				*((uint16_t*)(p + 0)) = htons(src.port()); // source port
+				*((uint16_t*)(p + 2)) = htons(local_endp.port()); // dest port
+				*((uint16_t*)(p + 4)) = htons(data.size() + 8); // udp len
+				*((uint16_t*)(p + 6)) = 0x00; // udp checksum
+
+				// udp body.
+				p = p + 8;
+				std::memcpy(p, data.data(), data.size());
+
+				// write to device.
+				// 计算checksum.
+				auto udp_payload = ip_data + 20;
+				auto udp_size = ip_len - 20;
+
+				*(uint16_t*)(udp_payload + 6) = udp_chksum_pseudo(udp_payload, udp_size, pair);
+
+				// 写入udp到设备.
+				m_demultiplexer->write_udp(buffer);
+			}
+
+			// 继续读取下一组udp数据.
+			m_udp_socket.async_receive_from(boost::asio::buffer(buf), recv_buf.endp,
+				boost::bind(&tun2socks::socks_handle_udp_read, this,
+					i,
+					boost::asio::placeholders::error,
+					boost::asio::placeholders::bytes_transferred
+				)
+			);
+		}
+
+		void handle_udp(ip_buffer buf)
+		{
+			if (!m_udp_socket.is_open())
+				return;
+
+			auto& endp = buf.endp_;
+
+			uint8_t* ip = buf.buf_.get();
+			uint8_t ip_version = (ip[0] >> 4);
+			if (ip_version != 4)
+				return;
+
+			if (buf.len_ < 28 || ip[9] != 0x11)
+				return;
+
+			// 转发数据给socks5服务器.
+			auto p = ip + 12;
+			auto src_addr = boost::asio::ip::address_v4(ntohl(*(uint32_t*)p));
+			auto dst_addr = boost::asio::ip::address_v4(ntohl(*(uint32_t*)(p + 4)));
+			p = ip + 20;
+
+			uint16_t src_port = ntohs(*(uint16_t*)p);
+			uint16_t dst_port = ntohs(*(uint16_t*)(p + 2));
+
+			auto src_endp = boost::asio::ip::udp::endpoint(src_addr, src_port);
+			auto dst_endp = boost::asio::ip::udp::endpoint(dst_addr, dst_port);
+
+			auto ip_len = ntohs(*(uint16_t*)(ip + 2));
+			auto udp_len = ntohs(*(uint16_t*)(ip + 24));
+
+			if (buf.len_ != ip_len || udp_len + 20 != buf.len_)
+				return;
+
+			if (dst_port == 53)
+			{
+				auto dns_id = *(uint16_t*)(ip + 28);
+				m_dnsmap[dns_id] = endp;
+			}
+			else
+			{
+				udp_portmap up;
+				up.local_endp = src_endp;
+				up.tick = std::time(nullptr);
+				auto k = (dst_addr.to_ulong() << 2) + dst_port;
+				m_portmap[k] = up;
+			}
+
+			auto result = socks::socks_client::udp_packet(dst_endp, ip + 28, udp_len - 8);
+			boost::local_shared_ptr<std::string> bufptr = boost::make_local_shared<std::string>(result);
+			m_udp_socket.async_send_to(boost::asio::buffer(*bufptr),
+				m_udp_remote_endp, [this, bufptr]
+				(const boost::system::error_code& error, std::size_t bytes_transferred)
+			{
+				if (error)
+				{
+					std::cout << "udp async_send_to error: " << error.message() << std::endl;
+					return;
+				}
+
+				// nothing to do in here.
 			});
 		}
 
@@ -315,6 +572,26 @@ namespace avpncore {
 		int m_num_ready;
 		int m_num_using;
 		std::string m_socks_server;
+		uint16_t m_dns_index;
+		std::map<uint16_t, endpoint_pair> m_dnsmap;
+		boost::asio::ip::tcp::socket m_udp_socks;
+		boost::asio::ip::udp::socket m_udp_socket;
+		boost::asio::ip::udp::endpoint m_udp_remote_endp;
+		// 数据接收缓冲.
+		struct udp_recv_buffer
+		{
+			boost::asio::ip::udp::endpoint endp;
+			boost::array<char, 2048> buffer;
+		};
+		enum { MAX_RECV_BUFFER_SIZE = 712 };
+		std::map<int, udp_recv_buffer> m_udp_recv_buffers;
+
+		struct udp_portmap
+		{
+			std::time_t tick;
+			boost::asio::ip::udp::endpoint local_endp;
+		};
+		std::map<uint64_t, udp_portmap> m_portmap;
 	};
 
 }
