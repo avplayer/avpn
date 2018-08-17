@@ -8,7 +8,7 @@
 
 socks5://1.1.1.1:1080
 
-在win上下载安装tap-windows驱动，并创建虚拟网卡
+在win上下载安装tap-windows驱动(linux一般自带tun驱动所以需要任何安装)，并创建虚拟网卡
 tap-windows下载位置在
 https://openvpn.net/index.php/open-source/downloads.html
 的最下面，我这里下载的是
