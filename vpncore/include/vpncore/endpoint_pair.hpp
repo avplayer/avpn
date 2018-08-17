@@ -1,6 +1,7 @@
 ﻿#pragma once
 #include <iostream>
 #include <boost/asio/ip/tcp.hpp>
+#include <boost/asio/ip/udp.hpp>
 
 #include <fmt/ostream.h>
 #include <fmt/printf.h>
@@ -127,6 +128,19 @@ namespace std
 }
 
 namespace logging {
+
+	inline logger& operator<<(logger& log, const boost::asio::ip::udp::endpoint& endp)
+	{
+		log << endp.address().to_string() << ":" << endp.port();
+		return log;
+	}
+
+	inline logger& operator<<(logger&& log, const boost::asio::ip::udp::endpoint& endp)
+	{
+		log << endp.address().to_string() << ":" << endp.port();
+		return log;
+	}
+
 
 	inline logger& operator<<(logger& log, const boost::asio::ip::tcp::endpoint& endp)
 	{
