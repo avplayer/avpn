@@ -59,7 +59,7 @@ namespace avpncore {
 		return (uint16_t)sum;
 	}
 
-	inline uint32_t inet_cksum_pseudo_base(const uint8_t* buf, int len, uint32_t acc)
+	inline uint32_t inet_cksum_pseudo_base(const uint8_t* buf, uint16_t type, int len, uint32_t acc)
 	{
 		int swapped = 0;
 
@@ -103,6 +103,25 @@ namespace avpncore {
 		acc = fold_uint32t(acc);
 		acc = fold_uint32t(acc);
 
-		return inet_cksum_pseudo_base(buf, len, acc);
+		return inet_cksum_pseudo_base(buf, 6, len, acc);
+	}
+
+	inline uint16_t udp_chksum_pseudo(const uint8_t* buf, int len, const endpoint_pair& endp)
+	{
+		uint32_t acc;
+		uint32_t addr;
+
+		addr = ntohl(endp.src_.address().to_v4().to_uint());
+		acc = (addr & 0xffffUL);
+		acc = (uint32_t)(acc + ((addr >> 16) & 0xffffUL));
+		addr = ntohl(endp.dst_.address().to_v4().to_uint());
+		acc = (uint32_t)(acc + (addr & 0xffffUL));
+		acc = (uint32_t)(acc + ((addr >> 16) & 0xffffUL));
+
+		/* fold down to 16 bits */
+		acc = fold_uint32t(acc);
+		acc = fold_uint32t(acc);
+
+		return inet_cksum_pseudo_base(buf, 0x11, len, acc);
 	}
 }
