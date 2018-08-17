@@ -461,7 +461,7 @@ namespace socks {
 			return endp;
 		}
 
-		std::string udp_packet(udp::endpoint endp, void* buf, std::size_t len)
+		static std::string udp_packet(udp::endpoint endp, void* buf, std::size_t len)
 		{
 			std::string response;
 			response.resize(len + 10);
@@ -478,7 +478,7 @@ namespace socks {
 			return response;
 		}
 
-		bool udp_unpacket(void* buf, std::size_t len, udp::endpoint& src, std::string& data)
+		static bool udp_unpacket(void* buf, std::size_t len, udp::endpoint& src, std::string& data)
 		{
 			uint8_t* p = (uint8_t*)buf;
 			if (len < 24)
