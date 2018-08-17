@@ -65,10 +65,15 @@ namespace avpncore {
 			m_backlog.push_back(stream);
 		}
 
-		using udp_handler = std::function<void(ip_buffer& buf)>;
+		using udp_handler = std::function<void(ip_buffer buf)>;
 		void accept_udp(udp_handler handler)
 		{
 			m_udp_handler = handler;
+		}
+
+		void write_udp(ip_buffer buffer)
+		{
+			ip_packet(buffer);
 		}
 
 		void remove_stream(const endpoint_pair& pair)
