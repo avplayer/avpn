@@ -412,6 +412,7 @@ namespace avpncore {
 				// 是dns.
 				bool dns_found = false;
 				endpoint_pair pair;
+				pair.type_ = ip_udp;
 				boost::asio::ip::udp::endpoint local_endp;
 				if (src.port() == 53)
 				{
@@ -421,6 +422,7 @@ namespace avpncore {
 					{
 						pair = it->second;
 						pair.reserve();
+						buffer.endp_ = pair;
 						local_endp = boost::asio::ip::udp::endpoint(pair.dst_.address(), pair.dst_.port());
 						*((uint32_t*)(p + 16)) = htonl(pair.dst_.address().to_v4().to_ulong()); // local/dest
 						dns_found = true;
@@ -438,6 +440,7 @@ namespace avpncore {
 						local_endp = it->second.local_endp;
 						pair.src_ = boost::asio::ip::tcp::endpoint(src.address(), src.port());
 						pair.dst_ = boost::asio::ip::tcp::endpoint(local_endp.address(), local_endp.port());
+						buffer.endp_ = pair;
 						it->second.tick = std::time(nullptr); // update time.
 						*((uint32_t*)(p + 16)) = htonl(local_endp.address().to_v4().to_ulong()); // local/dest
 					}
