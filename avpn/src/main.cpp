@@ -13,10 +13,10 @@
 #include <boost/asio/io_context.hpp>
 
 #include "vpncore/logging.hpp"
-#include "vpncore/socks_client.hpp"
+#include "vpncore/tun2socks/socks_client.hpp"
 #include "vpncore/tuntap.hpp"
 #include "vpncore/demultiplexer.hpp"
-#include "vpncore/tun2socks.hpp"
+#include "vpncore/tun2socks/tun2socks.hpp"
 
 using namespace tuntap_service;
 using namespace avpncore;

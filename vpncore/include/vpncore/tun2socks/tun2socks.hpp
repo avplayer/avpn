@@ -17,7 +17,7 @@
 #include "vpncore/tuntap.hpp"
 #include "vpncore/demultiplexer.hpp"
 #include "vpncore/tcp_stream.hpp"
-#include "vpncore/socks_client.hpp"
+#include "vpncore/tun2socks/socks_client.hpp"
 
 namespace avpncore {
 
