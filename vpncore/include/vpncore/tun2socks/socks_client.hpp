@@ -26,6 +26,52 @@
 #include "vpncore/logging.hpp"
 
 namespace socks {
+	using boost::asio::ip::tcp;
+	using boost::asio::ip::udp;
+
+	inline bool parse_udp_proxy_header(const void* buf, std::size_t len,
+		tcp::endpoint& src, tcp::endpoint& dst, uint16_t& payload_len)
+	{
+		const uint8_t* p = (const uint8_t*)buf;
+		if (len < 16)
+			return false;
+
+		read_int8(p);
+		auto local_ip = read_uint32(p);
+		auto local_port = read_uint16(p);
+		src.address(boost::asio::ip::address_v4(local_ip));
+		src.port(local_port);
+
+		read_int8(p);
+		auto remote_ip = read_uint32(p);
+		auto remote_port = read_uint16(p);
+		dst.address(boost::asio::ip::address_v4(remote_ip));
+		dst.port(remote_port);
+
+		payload_len = read_uint16(p);
+
+		return true;
+	}
+
+	inline std::string make_udp_proxy_header(
+		const tcp::endpoint& src, const tcp::endpoint& dst, const uint16_t& payload_len)
+	{
+		std::string response;
+		response.resize(payload_len + 16);
+		char* resp = (char*)response.data();
+
+		// 添加头信息.
+		write_uint8(1, resp);	// atyp.
+		write_uint32(src.address().to_v4().to_uint(), resp);	// ip.
+		write_uint16(src.port(), resp);	// port.
+		write_uint8(1, resp);	// atyp.
+		write_uint32(dst.address().to_v4().to_uint(), resp);	// ip.
+		write_uint16(dst.port(), resp);	// port.
+		write_uint16(payload_len, resp); // payload_len.
+
+		return response;
+	}
+
 
 	//////////////////////////////////////////////////////////////////////////
 
@@ -366,9 +412,6 @@ namespace socks {
 
 	//////////////////////////////////////////////////////////////////////////
 
-	using boost::asio::ip::tcp;
-	using boost::asio::ip::udp;
-
 	class socks_client
 		: public boost::enable_shared_from_this<socks_client>
 	{
@@ -459,56 +502,6 @@ namespace socks {
 			endp.address(m_remote_endp.address());
 			endp.port(m_remote_endp.port());
 			return endp;
-		}
-
-		static std::string udp_packet(udp::endpoint endp, void* buf, std::size_t len)
-		{
-			std::string response;
-			response.resize(len + 10);
-			char* wp = (char*)response.data();
-
-			// 添加头信息.
-			write_uint16(0, wp);	// RSV.
-			write_uint8(0, wp);		// FRAG.
-			write_uint8(1, wp);		// ATYP.
-			write_uint32(endp.address().to_v4().to_ulong(), wp);	// ADDR.
-			write_uint16(endp.port(), wp);	// PORT.
-			std::memcpy(wp, buf, len);	// DATA.
-
-			return response;
-		}
-
-		static bool udp_unpacket(void* buf, std::size_t len, udp::endpoint& src, std::string& data)
-		{
-			uint8_t* p = (uint8_t*)buf;
-			if (len < 24)
-				return false;
-
-			// 不是协议中的数据.
-			if (read_int16(p) != 0 || read_int8(p) != 0)
-				return false;
-
-			// 远程主机IP类型.
-			boost::int8_t atyp = read_int8(p);
-			if (atyp != 0x01 && atyp != 0x04)
-				return false;
-
-			// 目标主机IP.
-			boost::uint32_t ip = read_uint32(p);
-			if (ip == 0)
-				return false;
-			src.address(boost::asio::ip::address_v4(ip));
-
-			// 读取端口号.
-			boost::uint16_t port = read_uint16(p);
-			if (port == 0)
-				return false;
-			src.port(port);
-
-			// 这时的指针p是指向数据了(2 + 1 + 1 + 4 + 2 = 10).
-			data = std::string((char*)p, len - 10);
-
-			return true;
 		}
 
 	private:
