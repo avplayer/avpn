@@ -303,7 +303,7 @@ namespace avpncore {
 
 				if (!connect_socks(yield, m_udp_socks, m_socks_server, socks_addr))
 				{
-					timer.expires_from_now(std::chrono::minutes(1));
+					timer.expires_from_now(std::chrono::seconds(5));
 					timer.async_wait(yield[ec]);
 					start_udp_socks();
 					return;
@@ -329,7 +329,7 @@ namespace avpncore {
 						return;
 					}
 
-					LOG_ERR << " *SOCKS udp proxy success!";
+					LOG_INFO << " *SOCKS udp over tcp proxy successed!";
 
 					// 开始读取socks server的udp发回的数据.
 					boost::asio::spawn(m_io_context,
@@ -345,6 +345,7 @@ namespace avpncore {
 		{
 			boost::system::error_code ec;
 			boost::asio::streambuf buffer;
+			boost::asio::steady_timer timer{ m_io_context };
 
 			while (true)
 			{
@@ -352,6 +353,8 @@ namespace avpncore {
 					buffer.prepare(16), boost::asio::transfer_exactly(16), yield[ec]);
 				if (ec)
 				{
+					timer.expires_from_now(std::chrono::seconds(5));
+					timer.async_wait(yield[ec]);
 					start_udp_socks();
 					return;
 				}
@@ -368,6 +371,8 @@ namespace avpncore {
 					boost::asio::transfer_exactly(payload_len), yield[ec]);
 				if (ec)
 				{
+					timer.expires_from_now(std::chrono::seconds(5));
+					timer.async_wait(yield[ec]);
 					start_udp_socks();
 					return;
 				}
