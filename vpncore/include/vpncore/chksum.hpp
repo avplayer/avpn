@@ -92,10 +92,10 @@ namespace avpncore {
 		uint32_t acc;
 		uint32_t addr;
 
-		addr = ntohl(endp.src_.address().to_v4().to_uint());
+		addr = htonl(endp.src_.address().to_v4().to_uint());
 		acc = (addr & 0xffffUL);
 		acc = (uint32_t)(acc + ((addr >> 16) & 0xffffUL));
-		addr = ntohl(endp.dst_.address().to_v4().to_uint());
+		addr = htonl(endp.dst_.address().to_v4().to_uint());
 		acc = (uint32_t)(acc + (addr & 0xffffUL));
 		acc = (uint32_t)(acc + ((addr >> 16) & 0xffffUL));
 
@@ -111,10 +111,10 @@ namespace avpncore {
 		uint32_t acc;
 		uint32_t addr;
 
-		addr = ntohl(endp.src_.address().to_v4().to_uint());
+		addr = htonl(endp.src_.address().to_v4().to_uint());
 		acc = (addr & 0xffffUL);
 		acc = (uint32_t)(acc + ((addr >> 16) & 0xffffUL));
-		addr = ntohl(endp.dst_.address().to_v4().to_uint());
+		addr = htonl(endp.dst_.address().to_v4().to_uint());
 		acc = (uint32_t)(acc + (addr & 0xffffUL));
 		acc = (uint32_t)(acc + ((addr >> 16) & 0xffffUL));
 

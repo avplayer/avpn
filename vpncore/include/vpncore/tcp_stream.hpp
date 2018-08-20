@@ -105,11 +105,11 @@ namespace avpncore {
 			const endpoint_pair& endp,
 			int seq, int ack, uint8_t flags)
 		{
-			*(uint16_t*)(tcp + 0) = ntohs(endp.src_.port());	// src port
-			*(uint16_t*)(tcp + 2) = ntohs(endp.dst_.port());	// dst port
+			*(uint16_t*)(tcp + 0) = htons(endp.src_.port());	// src port
+			*(uint16_t*)(tcp + 2) = htons(endp.dst_.port());	// dst port
 
-			*(uint32_t*)(tcp + 4) = ntohl(seq);	// seq
-			*(uint32_t*)(tcp + 8) = ntohl(ack);	// ack
+			*(uint32_t*)(tcp + 4) = htonl(seq);	// seq
+			*(uint32_t*)(tcp + 8) = htonl(ack);	// ack
 
 			*(uint8_t*)(tcp + 12) = 0x50;					// offset
 
