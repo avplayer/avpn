@@ -76,7 +76,7 @@ namespace avpncore {
 			acc = (((acc) & 0xff) << 8) | (((acc) & 0xff00) >> 8);
 		}
 
-		acc += (uint32_t)htons((uint16_t)0x0006);
+		acc += (uint32_t)htons(type);
 		acc += (uint32_t)htons(len);
 
 		/* Fold 32-bit sum to 16 bits

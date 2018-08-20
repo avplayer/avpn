@@ -64,6 +64,7 @@ namespace avpncore {
 			, m_dev(dev)
 			, m_num_ready(0)
 			, m_num_using(0)
+			, m_udp_socks_ready(false)
 			, m_udp_socks(io)
 		{
 		}
@@ -300,7 +301,8 @@ namespace avpncore {
 				boost::system::error_code ec;
 				socks_address socks_addr;
 				boost::asio::steady_timer timer{ m_io_context };
-
+				m_udp_socks_ready = false;
+				m_udp_socks.close(ec);
 				if (!connect_socks(yield, m_udp_socks, m_socks_server, socks_addr))
 				{
 					timer.expires_from_now(std::chrono::seconds(5));
@@ -329,7 +331,9 @@ namespace avpncore {
 						return;
 					}
 
-					LOG_INFO << " *SOCKS udp over tcp proxy successed!";
+					m_udp_socks_ready = true;
+					m_buffer.clear();
+					LOG_INFO << "* SOCKS udp over tcp proxy successed!";
 
 					// 开始读取socks server的udp发回的数据.
 					boost::asio::spawn(m_io_context,
@@ -353,6 +357,7 @@ namespace avpncore {
 					buffer.prepare(16), boost::asio::transfer_exactly(16), yield[ec]);
 				if (ec)
 				{
+					m_udp_socks_ready = false;
 					timer.expires_from_now(std::chrono::seconds(5));
 					timer.async_wait(yield[ec]);
 					start_udp_socks();
@@ -366,7 +371,10 @@ namespace avpncore {
 				socks::parse_udp_proxy_header(boost::asio::buffer_cast<const void*>(buffer.data()),
 					bytes_transferred, src, dst, payload_len);
 
-				buffer.consume(bytes_transferred);
+				LOG_INFO << "udp header, src: " << src << ", dst: " << dst
+					<< ", udp size: " << payload_len;
+
+				buffer.consume(16);
 				bytes_transferred = boost::asio::async_read(m_udp_socks, buffer.prepare(payload_len),
 					boost::asio::transfer_exactly(payload_len), yield[ec]);
 				if (ec)
@@ -380,6 +388,8 @@ namespace avpncore {
 
 				write_udp_to_local(boost::asio::buffer_cast<const void*>(buffer.data()),
 					bytes_transferred, src, dst);
+
+				buffer.consume(bytes_transferred);
 			}
 		}
 
@@ -388,6 +398,9 @@ namespace avpncore {
 		{
 			auto ip_len = 28 + len;
 			ip_buffer buffer(ip_len);
+			buffer.endp_.dst_ = src;
+			buffer.endp_.src_ = dst;
+			buffer.endp_.type_ = ip_udp;
 
 			uint8_t* ip_data = buffer.buf_.get();
 			uint8_t* p = ip_data;
@@ -395,23 +408,22 @@ namespace avpncore {
 			*((uint8_t*)(p + 0)) = 0x45; // version
 			*((uint8_t*)(p + 1)) = 0x00; // tos
 			*((uint16_t*)(p + 2)) = htons(ip_len); // ip length
-			*((uint16_t*)(p + 4)) = htons(ip_len); // id
+			*((uint16_t*)(p + 4)) = 0; // id
 			*((uint16_t*)(p + 6)) = 0x00;	// flag
 			*((uint8_t*)(p + 8)) = 0x30; // ttl
 			*((uint8_t*)(p + 9)) = 0x11; // protocol
 			*((uint16_t*)(p + 10)) = 0x00; // checksum
 
-			uint32_t src_addr = src.address().to_v4().to_uint();
 			*((uint32_t*)(p + 12)) = htonl(dst.address().to_v4().to_uint()); // source
-			*((uint32_t*)(p + 16)) = htonl(src_addr); // dest
+			*((uint32_t*)(p + 16)) = htonl(src.address().to_v4().to_uint()); // dest
 
-			*((uint16_t*)(p + 10)) = standard_chksum(p, 20);// htons(sum); // ip header checksum
+			// *((uint16_t*)(p + 10)) = standard_chksum(p, 20);// htons(sum); // ip header checksum
 
 			// udp header.
 			p = p + 20;
-			*((uint16_t*)(p + 0)) = htons(dst.port()); // source port
-			*((uint16_t*)(p + 2)) = htons(src.port()); // dest port
-			*((uint16_t*)(p + 4)) = htons(len + 8); // udp len
+			*((uint16_t*)(p + 0)) = ntohs(dst.port()); // source port
+			*((uint16_t*)(p + 2)) = ntohs(src.port()); // dest port
+			*((uint16_t*)(p + 4)) = ntohs(len + 8); // udp len
 			*((uint16_t*)(p + 6)) = 0x00; // udp checksum
 
 			// udp body.
@@ -423,11 +435,7 @@ namespace avpncore {
 			auto udp_payload = ip_data + 20;
 			auto udp_size = ip_len - 20;
 
-			endpoint_pair pair;
-			pair.src_ = src;
-			pair.dst_ = dst;
-
-			*(uint16_t*)(udp_payload + 6) = udp_chksum_pseudo(udp_payload, udp_size, pair);
+			*((uint16_t*)(udp_payload + 6)) = udp_chksum_pseudo(udp_payload, len + 8, buffer.endp_);
 
 			// 写入udp到设备.
 			m_demultiplexer->write_udp(buffer);
@@ -435,7 +443,7 @@ namespace avpncore {
 
 		void handle_udp(ip_buffer buf)
 		{
-			if (!m_udp_socks.is_open())
+			if (!m_udp_socks.is_open() || !m_udp_socks_ready)
 				return;
 
 			auto& endp = buf.endp_;
@@ -473,6 +481,8 @@ namespace avpncore {
 			std::memcpy((void*)udp_payload.data(), proxy_header.data(), 16);
 			std::memcpy((void*)(udp_payload.data() + 16), ip + 28, payload_len);
 
+			LOG_INFO << "write udp, src: " << src_endp << ", dst: " << dst_endp
+				<< ", size: " << udp_payload.size();
 			write_udp_to_remote(udp_payload);
 		}
 
@@ -492,8 +502,7 @@ namespace avpncore {
 		{
 			if (error)
 			{
-				boost::system::error_code ignore_ec;
-				m_udp_socks.close(ignore_ec);
+				LOG_INFO << "write_udp_to_remote_handle: error: " << error.message();
 				return;
 			}
 
@@ -537,6 +546,7 @@ namespace avpncore {
 		int m_num_using;
 		std::string m_socks_server;
 		std::deque<std::string> m_buffer;
+		bool m_udp_socks_ready;
 		tcp::socket m_udp_socks;
 	};
 
