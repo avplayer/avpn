@@ -306,6 +306,7 @@ namespace avpncore {
 					timer.expires_from_now(std::chrono::minutes(1));
 					timer.async_wait(yield[ec]);
 					start_udp_socks();
+					return;
 				}
 
 				boost::system::error_code ignore_ec;
@@ -327,6 +328,8 @@ namespace avpncore {
 						start_udp_socks();
 						return;
 					}
+
+					LOG_ERR << " *SOCKS udp proxy success!";
 
 					// 开始读取socks server的udp发回的数据.
 					boost::asio::spawn(m_io_context,
