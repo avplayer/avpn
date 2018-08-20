@@ -101,6 +101,7 @@ namespace avpncore {
 
 			m_socks_server = socks_server;
 			m_demultiplexer->start();
+			start_udp_socks();
 
 			// 同时启动定时器.
 			start_timer();
