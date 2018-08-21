@@ -350,20 +350,24 @@ namespace avpncore {
 			boost::system::error_code ec;
 			boost::asio::streambuf buffer;
 			boost::asio::steady_timer timer{ m_io_context };
+			std::size_t bytes_transferred;
 
 			while (true)
 			{
-				auto bytes_transferred = boost::asio::async_read(m_udp_socks,
-					buffer.prepare(16), boost::asio::transfer_exactly(16), yield[ec]);
-				if (ec)
+				if (buffer.size() < 16)
 				{
-					m_udp_socks_ready = false;
-					timer.expires_from_now(std::chrono::seconds(5));
-					timer.async_wait(yield[ec]);
-					start_udp_socks();
-					return;
+					bytes_transferred = boost::asio::async_read(m_udp_socks,
+						buffer.prepare(2048), boost::asio::transfer_at_least(16), yield[ec]);
+					if (ec)
+					{
+						m_udp_socks_ready = false;
+						timer.expires_from_now(std::chrono::seconds(5));
+						timer.async_wait(yield[ec]);
+						start_udp_socks();
+						return;
+					}
+					buffer.commit(bytes_transferred);
 				}
-				buffer.commit(bytes_transferred);
 
 				tcp::endpoint src;
 				tcp::endpoint dst;
@@ -375,21 +379,24 @@ namespace avpncore {
 					<< ", udp size: " << payload_len;
 
 				buffer.consume(16);
-				bytes_transferred = boost::asio::async_read(m_udp_socks, buffer.prepare(payload_len),
-					boost::asio::transfer_exactly(payload_len), yield[ec]);
-				if (ec)
+				if (buffer.size() < payload_len)
 				{
-					timer.expires_from_now(std::chrono::seconds(5));
-					timer.async_wait(yield[ec]);
-					start_udp_socks();
-					return;
+					bytes_transferred = boost::asio::async_read(m_udp_socks, buffer.prepare(payload_len),
+						boost::asio::transfer_at_least(payload_len), yield[ec]);
+					if (ec)
+					{
+						timer.expires_from_now(std::chrono::seconds(5));
+						timer.async_wait(yield[ec]);
+						start_udp_socks();
+						return;
+					}
+					buffer.commit(bytes_transferred);
 				}
-				buffer.commit(bytes_transferred);
 
 				write_udp_to_local(boost::asio::buffer_cast<const void*>(buffer.data()),
-					bytes_transferred, src, dst);
+					payload_len, src, dst);
 
-				buffer.consume(bytes_transferred);
+				buffer.consume(payload_len);
 			}
 		}
 
