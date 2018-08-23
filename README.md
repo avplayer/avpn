@@ -38,7 +38,8 @@ avpn.exe 虚拟网卡的名字 socks5://1.1.1.1:1080
 
 netsh interface ip set interface WLAN ignoredefaultroutes = enabled
 
-上面命令是忽略指定网卡接口的默认路由，这里是忽略WLAN
+上面命令是忽略指定网卡接口的默认路由，这里是忽略WLAN（linux上可通过增大默认路由
+的metric或直接删除默认路由，如果是在远程机器上测试千万别这么干，会导致断网）
 
 route add 1.1.1.1 192.168.125.1 metric 1
 
