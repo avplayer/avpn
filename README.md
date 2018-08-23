@@ -8,7 +8,7 @@
 
 socks5://1.1.1.1:1080
 
-在win上下载安装tap-windows驱动(linux一般自带tun驱动所以需要任何安装)，并创建虚拟网卡
+在win上下载安装tap-windows驱动(linux内核一般自带tun驱动所以不需要安装任何驱动)，并创建虚拟网卡
 tap-windows下载位置在
 https://openvpn.net/index.php/open-source/downloads.html
 的最下面，我这里下载的是
@@ -26,8 +26,7 @@ avpn.exe 虚拟网卡的名字 socks5://1.1.1.1:1080
 
 但这时所有数据包走的是默认本地网络，而不是虚拟网卡，这时
 我们需要调整路由表来实现默认走虚拟网卡，只有socks5://1.1.1.1:1080
-走本地连接, 当然还有dns也需要走本地连接(在开发tcp状态机替换lwip时
-我暂时把dns转发去掉了, 后面会再加回dns转发的).
+走本地连接.
 
 成功启动avpn并修改了路由之后, 我们便可以执行curl来测试vpn的运行了, 如:
 
