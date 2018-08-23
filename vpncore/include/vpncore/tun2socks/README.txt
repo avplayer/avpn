@@ -8,7 +8,7 @@ tun2socks.hpp 是tun2socks的具体实现.
 async_accept一个tcp_stream, 在handle_accept
 回调时, 创建socks_client对象连接socks代理
 服务器, 连接成功再在收到accept的tcp_stream对
-象上执行accept(tcp_stream::ac_deny), 表示接
+象上执行accept(tcp_stream::ac_allow), 表示接
 收连接, 在此之后, 就是从tcp_stream对象上读
 取数据并把数据转发给socks_clent, 与此同时也
 读取socks_client上的数据转发给tcp_stream,
