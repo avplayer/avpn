@@ -37,12 +37,15 @@ avpn.exe 虚拟网卡的名字 socks5://1.1.1.1:1080
 然后执行命令：
 
 netsh interface ip set interface WLAN ignoredefaultroutes = enabled
+
 上面命令是忽略指定网卡接口的默认路由，这里是忽略WLAN
 
 route add 1.1.1.1 192.168.125.1 metric 1
+
 这里是将socks的服务器ip指定路由到192.168.125.1
 
 route add 0.0.0.0 mask 0.0.0.0 10.0.0.2 metric 5
+
 这是将所有数据都将走10.0.0.2，因为我们的虚拟网卡接口的网关就是10.0.0.2，10.0.0.2它是
 一个并不实际存在的，目的主要是将所有ip数据都通过这个虚拟网卡接口.
 
