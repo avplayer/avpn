@@ -158,15 +158,16 @@ set(ZLIB_LIBRARIES zlib)
 set(ZLIB_INCLUDE_DIRS ${CMAKE_CURRENT_SOURCE_DIR}/third_party/zlib)
 link_libraries(${ZLIB_LIBRARIES})
 
+add_definitions(-DSODIUM_STATIC)
+add_subdirectory(third_party/libsodium EXCLUDE_FROM_ALL)
+link_libraries(${SODIUM_LIBRARIES})
+include_directories(${SODIUM_INCLUDE_DIRS})
+
 add_subdirectory(third_party/fmt)
 set(LIBFMT_INCLUDE_DIRS ${CMAKE_CURRENT_SOURCE_DIR}/third_party/fmt)
 include_directories(${LIBFMT_INCLUDE_DIRS})
 set(LIBFMT_LIBRARIES fmt)
 link_libraries(${LIBFMT_LIBRARIES})
-
-add_subdirectory(third_party/libsodium)
-link_libraries(${SODIUM_LIBRARIES})
-include_directories(${SODIUM_INCLUDE_DIRS})
 
 add_subdirectory(vpncore)
 
