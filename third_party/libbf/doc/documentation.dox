@@ -1,0 +1,14 @@
+/**
+
+\mainpage libbf
+
+**libbf** is a C++11 Bloom filter library.
+
+\section Usage
+
+Please refer to [the project page](https://github.com/mavam/libbf) for usage
+examples.
+
+This manual only documents the API.
+
+*/
