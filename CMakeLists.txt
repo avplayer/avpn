@@ -159,6 +159,10 @@ include_directories(${LIBFMT_INCLUDE_DIRS})
 set(LIBFMT_LIBRARIES fmt)
 link_libraries(${LIBFMT_LIBRARIES})
 
+add_subdirectory(third_party/libsodium)
+link_libraries(${SODIUM_LIBRARIES})
+include_directories(${SODIUM_INCLUDE_DIRS})
+
 add_subdirectory(vpncore)
 
 include_directories(
