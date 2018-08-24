@@ -163,6 +163,10 @@ add_subdirectory(third_party/libsodium EXCLUDE_FROM_ALL)
 link_libraries(${SODIUM_LIBRARIES})
 include_directories(${SODIUM_INCLUDE_DIRS})
 
+add_subdirectory(third_party/libbf)
+include_directories(${LIBBF_INCLUDE_DIRS})
+link_libraries(${LIBBF_LIBRARIES})
+
 add_subdirectory(third_party/fmt)
 set(LIBFMT_INCLUDE_DIRS ${CMAKE_CURRENT_SOURCE_DIR}/third_party/fmt)
 include_directories(${LIBFMT_INCLUDE_DIRS})
