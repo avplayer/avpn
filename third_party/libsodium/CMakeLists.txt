@@ -5,10 +5,6 @@ cmake_minimum_required(VERSION 3.0.0 FATAL_ERROR)
 ###################################################
 
 set(PROJECT_NAME libsodium)
-# Output Variables
-
-#set(OUTPUT_DEBUG libsodium.cmake/${CMAKE_BUILD_TYPE})
-#set(OUTPUT_REL libsodium.cmake/${CMAKE_BUILD_TYPE})
 
 # Folders files
 set(CPP_DIR_1 src/libsodium/crypto_generichash)
@@ -105,11 +101,6 @@ set(HEADER_DIR_20 src/libsodium/crypto_stream/salsa20/xmm6int)
 set(HEADER_DIR_21 src/libsodium/crypto_stream/salsa20/xmm6)
 set(HEADER_DIR_22 src/libsodium/crypto_core/ed25519/ref10/fe_25_5)
 set(HEADER_DIR_23 src/libsodium/crypto_core/ed25519/ref10/fe_51)
-#set(HEADER_DIR_24 ../..)
-
-############## CMake Project ################
-#        The main options of project        #
-#############################################
 
 project(${PROJECT_NAME} C)
 
@@ -118,20 +109,6 @@ if(NOT CMAKE_BUILD_TYPE)
   set(CMAKE_BUILD_TYPE "Release")
   message(STATUS "Build type not specified: Use Release by default.")
 endif(NOT CMAKE_BUILD_TYPE)
-
-############## Artefacts Output #################
-# Defines outputs , depending Debug or Release. #
-#################################################
-
-#if(CMAKE_BUILD_TYPE STREQUAL "Debug")
-#  set(CMAKE_LIBRARY_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/${OUTPUT_DEBUG}")
-#  set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/${OUTPUT_DEBUG}")
-#  set(CMAKE_EXECUTABLE_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/${OUTPUT_DEBUG}")
-#else()
-#  set(CMAKE_LIBRARY_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/${OUTPUT_REL}")
-#  set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/${OUTPUT_REL}")
-#  set(CMAKE_EXECUTABLE_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/${OUTPUT_REL}")
-#endif()
 
 ################# Flags ################
 # Defines Flags for Windows and Linux. #
