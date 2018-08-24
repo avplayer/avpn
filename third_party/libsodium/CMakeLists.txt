@@ -149,7 +149,7 @@ if(NOT MSVC)
 endif(NOT MSVC)
 
 add_definitions(-DSODIUM_STATIC)
-include_directories(src/libsodium/include/sodium/)
+include_directories(${CMAKE_CURRENT_SOURCE_DIR}/src/libsodium/include/sodium/)
 
 ################ Files ################
 #   --   Add files to project.   --   #
@@ -261,6 +261,7 @@ add_library(${PROJECT_NAME} STATIC
 target_include_directories(${PROJECT_NAME} PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/src/libsodium/include)
 set_target_properties(${PROJECT_NAME} PROPERTIES FOLDER "third_party")
 set_target_properties(${PROJECT_NAME} PROPERTIES POSITION_INDEPENDENT_CODE ON)
+set_target_properties(${PROJECT_NAME} PROPERTIES OUTPUT_NAME sodium PREFIX "lib" CLEAN_DIRECT_OUTPUT 1)
 
 set(SODIUM_INCLUDE_DIRS ${CMAKE_CURRENT_SOURCE_DIR}/src/libsodium/include PARENT_SCOPE)
 set(SODIUM_LIBRARIES ${PROJECT_NAME} PARENT_SCOPE)
