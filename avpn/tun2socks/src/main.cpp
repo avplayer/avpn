@@ -14,7 +14,6 @@
 
 #include "vpncore/logging.hpp"
 #include "vpncore/tuntap.hpp"
-#include "vpncore/demultiplexer.hpp"
 #include "tun2socks/tun2socks.hpp"
 
 using namespace tuntap_service;
