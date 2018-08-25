@@ -29,6 +29,22 @@ namespace crypto {
 		{}
 
 	public:
+		// 指定nonce加密, 加密后的数据尾部不带nonce.
+		std::vector<uint8_t> encrypt(std::vector<uint8_t>& message,
+			std::vector<uint8_t>& additional, nonce_type& nonce)
+		{
+			std::vector<uint8_t> result(message.size() +
+				crypto_aead_xchacha20poly1305_ietf_ABYTES, 0);
+			unsigned long long ciphertext_len;
+			crypto_aead_xchacha20poly1305_ietf_encrypt(result.data(), &ciphertext_len,
+				message.data(), message.size(),
+				additional.data(), additional.size(),
+				NULL, nonce, m_key);
+			result.resize(ciphertext_len);
+			return result;
+		}
+
+		// 随机nonce加密, 加密后的数据尾部带上随机nonce.
 		std::vector<uint8_t> encrypt(
 			std::vector<uint8_t>& message, std::vector<uint8_t>& additional)
 		{
