@@ -1,4 +1,4 @@
-#include <bf/bloom_filter/basic.hpp>
+﻿#include <bf/bloom_filter/basic.hpp>
 
 #include <cassert>
 #include <cmath>
@@ -22,7 +22,7 @@ basic_bloom_filter::basic_bloom_filter(hasher h, size_t cells, bool partition)
 basic_bloom_filter::basic_bloom_filter(double fp, size_t capacity, size_t seed,
                                        bool double_hashing, bool partition)
     : partition_(partition) {
-  auto required_cells = m(fp, capacity);
+  auto required_cells = m(fp, capacity) / 2 * 2;
   auto optimal_k = k(required_cells, capacity);
   bits_.resize(required_cells);
   hasher_ = make_hasher(optimal_k, seed, double_hashing);
