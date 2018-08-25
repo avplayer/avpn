@@ -10,7 +10,7 @@ file(GLOB vpncore_SRCS
 )
 
 file(GLOB tun2socks_SRCS
-	include/vpncore/tun2socks/*.hpp
+	include/tun2socks/*.hpp
 )
 
 file(GLOB crypto_SRCS

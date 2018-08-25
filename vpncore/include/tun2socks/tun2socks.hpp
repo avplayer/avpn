@@ -17,7 +17,7 @@
 #include "vpncore/tuntap.hpp"
 #include "vpncore/demultiplexer.hpp"
 #include "vpncore/tcp_stream.hpp"
-#include "vpncore/tun2socks/socks_client.hpp"
+#include "tun2socks/socks_client.hpp"
 
 namespace avpncore {
 	using boost::asio::ip::tcp;
