@@ -123,7 +123,7 @@ namespace crypto {
 
 		void key(const std::string& k)
 		{
-			auto size = std::min<int>(k.size(),
+			auto size = std::min<std::size_t>(k.size(),
 				crypto_aead_xchacha20poly1305_ietf_KEYBYTES);
 			std::memset(m_key, 0, crypto_aead_xchacha20poly1305_ietf_KEYBYTES);
 			std::memcpy(m_key, k.data(), size);
