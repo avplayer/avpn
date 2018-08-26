@@ -1,5 +1,6 @@
 ﻿#include <iostream>
 #include <string>
+#include <algorithm>
 
 #ifdef __linux__
 #  include <sys/resource.h>
@@ -13,10 +14,10 @@
 #include <boost/asio/io_context.hpp>
 
 #include "vpncore/logging.hpp"
-#include "vpncore/tun2socks/socks_client.hpp"
 #include "vpncore/tuntap.hpp"
-#include "vpncore/demultiplexer.hpp"
-#include "vpncore/tun2socks/tun2socks.hpp"
+
+#include "vpn/vpn_server.hpp"
+
 
 using namespace tuntap_service;
 using namespace avpncore;
@@ -110,11 +111,7 @@ int main(int argc, char** argv)
 		return -1;
 	}
 
-	// 创建tun2socks对象.
-	tun2socks ts(io, tap);
-
-	// 启动tun2socks.
-	ts.start("10.0.0.2", cfg.mask_, argv[2]);
+	vpn_server s(io, tap, 1779);
 
 	// running...
 	io.run();
