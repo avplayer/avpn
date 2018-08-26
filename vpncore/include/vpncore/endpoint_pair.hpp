@@ -101,9 +101,12 @@ namespace avpncore {
 		return true;
 	}
 
-	endpoint_pair lookup_endpoint_pair(const uint8_t* buf, int len)
+	endpoint_pair lookup_endpoint_pair(const uint8_t* buf, std::size_t len)
 	{
 		uint8_t ihl = ((*(uint8_t*)(buf)) & 0x0f) * 4;
+		if (len < ihl + 4)
+			return {};
+
 		uint16_t total = ntohs(*(uint16_t*)(buf + 2));
 		uint8_t type = *(uint8_t*)(buf + 9);
 		uint32_t src_ip = (*(uint32_t*)(buf + 12));
@@ -137,7 +140,7 @@ namespace avpncore {
 			return endp;
 		}
 
-		return endpoint_pair();
+		return {};
 	}
 }
 
