@@ -17,11 +17,16 @@ file(GLOB crypto_SRCS
 	include/crypto/*.hpp
 )
 
-add_library(vpncore STATIC ${vpncore_SRCS} ${tun2socks_SRCS} ${crypto_SRCS})
+file(GLOB vpn_SRCS
+	include/vpn/*.hpp
+)
+
+add_library(vpncore STATIC ${vpncore_SRCS} ${tun2socks_SRCS} ${crypto_SRCS} ${vpn_SRCS})
 
 source_group("Header Files\\tun2socks" FILES ${tun2socks_SRCS})
 source_group("Header Files\\vpncore" FILES ${vpncore_SRCS})
 source_group("Header Files\\crypto" FILES ${crypto_SRCS})
+source_group("Header Files\\vpn" FILES ${vpn_SRCS})
 
 target_include_directories(vpncore PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/include/)
 set(VPNCORE_LIBRARIES vpncore PARENT_SCOPE)
