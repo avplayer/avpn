@@ -11,6 +11,13 @@
 
 namespace avpncore {
 
+	// see https://www.iana.org/assignments/protocol-numbers/protocol-numbers.txt
+	enum ip_type
+	{
+		ip_tcp = 0x06,
+		ip_udp = 0x11,
+	};
+
 	// 定义一个源地址和目标地址的结构.
 	struct endpoint_pair
 	{
@@ -92,6 +99,45 @@ namespace avpncore {
 		if (lh == rh)
 			return false;
 		return true;
+	}
+
+	endpoint_pair lookup_endpoint_pair(const uint8_t* buf, int len)
+	{
+		uint8_t ihl = ((*(uint8_t*)(buf)) & 0x0f) * 4;
+		uint16_t total = ntohs(*(uint16_t*)(buf + 2));
+		uint8_t type = *(uint8_t*)(buf + 9);
+		uint32_t src_ip = (*(uint32_t*)(buf + 12));
+		uint32_t dst_ip = (*(uint32_t*)(buf + 16));
+
+		if (type == ip_tcp)		// only tcp
+		{
+			auto p = buf + ihl;
+
+			uint16_t src_port = (*(uint16_t*)(p + 0));
+			uint16_t dst_port = (*(uint16_t*)(p + 2));
+
+			endpoint_pair endp(src_ip, src_port, dst_ip, dst_port);
+			endp.type_ = type;
+
+			return endp;
+		}
+		else if (type == ip_udp)
+		{
+			auto p = buf + ihl;
+
+			uint16_t src_port = (*(uint16_t*)(p + 0));
+			uint16_t dst_port = (*(uint16_t*)(p + 2));
+
+			// auto udp_len = *(uint16_t*)(p + 4);
+			// auto chksum = *(uint16_t*)(p + 6);	// skip chksum.
+
+			endpoint_pair endp(src_ip, src_port, dst_ip, dst_port);
+			endp.type_ = type;
+
+			return endp;
+		}
+
+		return endpoint_pair();
 	}
 }
 

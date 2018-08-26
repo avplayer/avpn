@@ -48,7 +48,7 @@ namespace avpncore {
 		~demultiplexer()
 		{}
 
-		// 开始工作.
+		// start working.
 		void start()
 		{
  			m_io_context.post(std::bind(
@@ -112,21 +112,21 @@ namespace avpncore {
 
 				if (endp.type_ == ip_tcp)
 				{
-					auto demuxer = lookup_stream(endp);
-					if (!demuxer)
+					auto stream = lookup_stream(endp);
+					if (!stream)
 					{
 						if (!m_backlog.empty())
 						{
-							demuxer = m_backlog.back();
+							stream = m_backlog.back();
 							m_backlog.pop_back();
-							demuxer->set_write_ip_handler(
+							stream->set_write_ip_handler(
 								std::bind(&demultiplexer::ip_packet, shared_from_this(),
 									std::placeholders::_1));
-							m_tcp_conntrack[endp] = demuxer;
+							m_tcp_conntrack[endp] = stream;
 						}
 					}
-					if (demuxer)
-						demuxer->output(buf, bytes);
+					if (stream)
+						stream->output(buf, bytes);
 				}
 				else if (endp.type_ == ip_udp)
 				{
@@ -189,45 +189,6 @@ namespace avpncore {
 			if (it == m_tcp_conntrack.end())
 				return nullptr;
 			return it->second;
-		}
-
-		endpoint_pair lookup_endpoint_pair(const uint8_t* buf, int len)
-		{
-			uint8_t ihl = ((*(uint8_t*)(buf)) & 0x0f) * 4;
-			uint16_t total = ntohs(*(uint16_t*)(buf + 2));
-			uint8_t type = *(uint8_t*)(buf + 9);
-			uint32_t src_ip = (*(uint32_t*)(buf + 12));
-			uint32_t dst_ip = (*(uint32_t*)(buf + 16));
-
-			if (type == ip_tcp)		// only tcp
-			{
-				auto p = buf + ihl;
-
-				uint16_t src_port = (*(uint16_t*)(p + 0));
-				uint16_t dst_port = (*(uint16_t*)(p + 2));
-
-				endpoint_pair endp(src_ip, src_port, dst_ip, dst_port);
-				endp.type_ = type;
-
-				return endp;
-			}
-			else if (type == ip_udp)
-			{
-				auto p = buf + ihl;
-
-				uint16_t src_port = (*(uint16_t*)(p + 0));
-				uint16_t dst_port = (*(uint16_t*)(p + 2));
-
-				auto udp_len = *(uint16_t*)(p + 4);
-				// auto chksum = *(uint16_t*)(p + 6);	// skip chksum.
-
-				endpoint_pair endp(src_ip, src_port, dst_ip, dst_port);
-				endp.type_ = type;
-
-				return endp;
-			}
-
-			return endpoint_pair();
 		}
 
 		void start_work()

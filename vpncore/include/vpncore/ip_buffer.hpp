@@ -11,13 +11,6 @@
 
 namespace avpncore {
 
-	// see https://www.iana.org/assignments/protocol-numbers/protocol-numbers.txt
-	enum ip_type
-	{
-		ip_tcp = 0x06,
-		ip_udp = 0x11,
-	};
-
 	// 定义IP包数据缓存结构, 这个结构允许
 	// 自己管理自己的内存, 使用 boost::local_shared_ptr 来管理
 	// 内存资源, 主要是这里不需要考虑线程安全, 避免原子操作.
