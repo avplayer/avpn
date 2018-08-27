@@ -60,7 +60,7 @@ namespace crypto {
 
 		static xchacha20poly1305_key from_string(const std::string& k)
 		{
-			return xchacha20poly1305_key(k);
+			return { k };
 		}
 	};
 
@@ -76,7 +76,7 @@ namespace crypto {
 
 		static xchacha20poly1305_nonce from_string(const std::string& nonce)
 		{
-			return xchacha20poly1305_nonce(nonce);
+			return { nonce };
 		}
 	};
 
