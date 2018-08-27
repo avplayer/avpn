@@ -23,7 +23,8 @@ namespace crypto {
 			: m_bloom_filter(0.4, 100000000)
 		{
 			std::memset(m_key, 0, crypto_aead_xchacha20poly1305_ietf_KEYBYTES);
-			sodium_init();
+			if (sodium_init() == -1)
+				LOG_ERR << "sodium_init fail!";
 		}
 		~xchacha20poly1305_crypto()
 		{}
