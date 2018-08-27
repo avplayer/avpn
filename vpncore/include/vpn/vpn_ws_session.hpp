@@ -27,6 +27,7 @@
 #include "crypto/xchacha20poly1305_crypto.hpp"
 
 namespace avpncore {
+	using namespace crypto;
 	using boost::asio::ip::tcp;
 	namespace http = boost::beast::http;            // from <boost/beast/http.hpp>
 	namespace websocket = boost::beast::websocket;  // from <boost/beast/websocket.hpp>
@@ -45,7 +46,8 @@ R"(<html>
 <center><h1>404 Not Found</h1></center>
 <hr><center>nginx/1.12.2</center>
 </body>
-</html>)";
+</html>
+)";
 
 	class vpn_ws_session
 		: public std::enable_shared_from_this<vpn_ws_session>
@@ -91,14 +93,15 @@ R"(<html>
 			if (ec)
 			{
 				LOG_DBG << "read error: " << ec.message();
+				do_close();
 				return;
 			}
 
-			if (ec == http::error::end_of_stream)
-				return do_close();
+			auto target = m_request.target();
+			LOG_DBG << "request target: " << target.to_string();
 
 			auto self = shared_from_this();
-
+			// 如果是http连接, 直接返回 404 页面.
 			if (!websocket::is_upgrade(m_request))
 			{
 				auto res = boost::make_local_shared<http::response<http::string_body>>(
@@ -120,8 +123,7 @@ R"(<html>
 				return;
 			}
 
-			m_websocket.async_accept(
-				m_request, [self, this]
+			m_websocket.async_accept([self, this]
 				(boost::system::error_code ec)
 				{
 					if (ec)
@@ -137,18 +139,28 @@ R"(<html>
 
 		void do_read()
 		{
-			// Read a message into our buffer
-// 			ws_.async_read(
-// 				buffer_,
-// 				boost::asio::bind_executor(
-// 					strand_,
-// 					std::bind(
-// 						&websocket_session::on_read,
-// 						shared_from_this(),
-// 						std::placeholders::_1,
-// 						std::placeholders::_2)));
+			m_websocket.async_read(m_buffer,
+				std::bind(&vpn_ws_session::on_read,
+					shared_from_this(),
+					std::placeholders::_1,
+					std::placeholders::_2));
 		}
 
+		void on_read(boost::system::error_code ec, std::size_t bytes_transferred)
+		{
+			if (ec)
+			{
+				do_close();
+				return;
+			}
+
+			//m_request;
+			//auto data = boost::asio::buffer_cast<const void*>(m_buffer.data());
+			//m_xchacha20poly1305_crypto.decrypt(data, bytes_transferred);
+
+			// 继续读取下一个数据包.
+			do_read();
+		}
 
 		void do_close()
 		{
@@ -165,6 +177,7 @@ R"(<html>
 		remove_session_handler m_remove_session_handler;
 		boost::beast::flat_buffer m_buffer;
 		http::request<http::string_body> m_request;
+		xchacha20poly1305_crypto m_xchacha20poly1305_crypto;
 	};
 
 }
