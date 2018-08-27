@@ -48,7 +48,7 @@ namespace avpncore {
 		}
 
 	public:
-		void register_vpn_session(const endpoint_pair& endp, vpn_ws_session_ptr& session)
+		void register_vpn_session(const endpoint_pair& endp, vpn_ws_session_ptr session)
 		{
 			m_sessions.insert(std::make_pair(endp, session));
 		}
