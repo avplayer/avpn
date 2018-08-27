@@ -5,6 +5,7 @@
 #include "vpncore/tuntap.hpp"
 #include "vpncore/endpoint_pair.hpp"
 
+#include "vpn/vpn_keys.hpp"
 #include "vpn/vpn_ws_session.hpp"
 
 namespace avpncore {
@@ -30,9 +31,9 @@ namespace avpncore {
 			ip_demux();
 		}
 
-		void start_session(tcp::socket socket)
+		void start_session(tcp::socket socket, vpn_keys& keys)
 		{
-			auto session = std::make_shared<vpn_ws_session>(std::move(socket));
+			auto session = std::make_shared<vpn_ws_session>(std::move(socket), keys);
 
 			// set handlers.
 			session->set_register_handler(

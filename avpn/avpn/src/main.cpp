@@ -85,8 +85,8 @@ int main(int argc, char** argv)
 	if (argc >= 2)
 		cfg.dev_name_ = argv[1];
 
-	tuntap tap(io);
-	auto dev_list = tap.take_device_list();
+	tuntap dev(io);
+	auto dev_list = dev.take_device_list();
 	std::string guid;
 	for (auto& i : dev_list)
 	{
@@ -105,13 +105,16 @@ int main(int argc, char** argv)
 #else
 	cfg.dev_type_ = tuntap_service::dev_tun;
 #endif
-	if (!tap.open(cfg))
+	if (!dev.open(cfg))
 	{
 		LOG_ERR << "open tun device fail!";
 		return -1;
 	}
 
-	vpn_server s(io, tap, 1779);
+	vpn_keys keys;
+	keys.emplace_back("test");
+
+	vpn_server s(io, dev, keys, 1779);
 
 	// running...
 	io.run();

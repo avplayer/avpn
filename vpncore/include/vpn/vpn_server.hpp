@@ -20,6 +20,7 @@
 #include "vpncore/endpoint_pair.hpp"
 #include "vpncore/tuntap.hpp"
 #include "vpn/vpn_demuxer.hpp"
+#include "vpn/vpn_keys.hpp"
 
 namespace avpncore {
 	using boost::asio::ip::tcp;
@@ -34,10 +35,11 @@ namespace avpncore {
 		vpn_server& operator=(const vpn_server&) = delete;
 
 	public:
-		vpn_server(boost::asio::io_context& io, tuntap& dev,
+		vpn_server(boost::asio::io_context& io, tuntap& dev, vpn_keys keys,
 			unsigned short port, std::string address = "127.0.0.1")
 			: m_io_context(io)
 			, m_dev(dev)
+			, m_server_keys(keys)
 			, m_acceptor(io, tcp::endpoint(boost::asio::ip::address::from_string(address), port))
 			, m_demuxer(dev)
 		{
@@ -59,7 +61,7 @@ namespace avpncore {
 					return;
 
 				// start session.
-				m_demuxer.start_session(std::move(socket));
+				m_demuxer.start_session(std::move(socket), m_server_keys);
 
 				// next accept.
 				do_accept();
@@ -69,6 +71,7 @@ namespace avpncore {
 	private:
 		boost::asio::io_context& m_io_context;
 		tuntap& m_dev;
+		vpn_keys m_server_keys;
 		tcp::acceptor m_acceptor;
 		vpn_demuxer m_demuxer;
 	};

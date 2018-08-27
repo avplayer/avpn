@@ -24,6 +24,8 @@
 #include "vpncore/endpoint_pair.hpp"
 #include "vpncore/ip_buffer.hpp"
 
+#include "vpn/vpn_keys.hpp"
+
 #include "crypto/xchacha20poly1305_crypto.hpp"
 
 namespace avpncore {
@@ -53,8 +55,9 @@ R"(<html>
 		: public std::enable_shared_from_this<vpn_ws_session>
 	{
 	public:
-		vpn_ws_session(tcp::socket socket)
+		vpn_ws_session(tcp::socket socket, vpn_keys& keys)
 			: m_websocket(std::move(socket))
+			, m_server_keys(keys)
 		{}
 		~vpn_ws_session()
 		{}
@@ -154,8 +157,7 @@ R"(<html>
 				return;
 			}
 
-			//m_request;
-			//auto data = boost::asio::buffer_cast<const void*>(m_buffer.data());
+			auto data = boost::asio::buffer_cast<const void*>(m_buffer.data());
 			//m_xchacha20poly1305_crypto.decrypt(data, bytes_transferred);
 
 			// 继续读取下一个数据包.
@@ -171,6 +173,7 @@ R"(<html>
 
 	private:
 		websocket::stream<tcp::socket> m_websocket;
+		vpn_keys& m_server_keys;
 		session2tun_handler m_write_ip_handler;
 		endpoint_pair m_endpoint_pair;
 		register_session_handler m_register_session_handler;
