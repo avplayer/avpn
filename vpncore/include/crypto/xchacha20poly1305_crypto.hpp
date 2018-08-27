@@ -64,8 +64,8 @@ namespace crypto {
 			return result;
 		}
 
-		std::vector<uint8_t> decrypt(std::vector<uint8_t>& ciphertext,
-			std::vector<uint8_t>& additional, nonce_type& nonce)
+		std::vector<uint8_t> decrypt(const void* ciphertext, std::size_t ciphertext_len,
+			const void* additional, std::size_t additional_len, nonce_type& nonce)
 		{
 			std::vector<uint8_t> result(1024 * 1024, 0);
 			unsigned long long decrypted_len;
@@ -76,8 +76,45 @@ namespace crypto {
 			}
 			m_bloom_filter.add(nonce);
 			if (crypto_aead_xchacha20poly1305_ietf_decrypt(result.data(), &decrypted_len,
-				NULL, ciphertext.data(), ciphertext.size(),
-				additional.data(), additional.size(), nonce, m_key) != 0)
+				NULL, (const unsigned char*)ciphertext, ciphertext_len,
+				(const unsigned char*)additional, additional_len, nonce, m_key) != 0)
+			{
+				result.resize(0);
+				return result;
+			}
+			result.resize(decrypted_len);
+			return result;
+		}
+
+		std::vector<uint8_t> decrypt(std::vector<uint8_t>& ciphertext,
+			std::vector<uint8_t>& additional, nonce_type& nonce)
+		{
+			return decrypt(ciphertext.data(), ciphertext.size(),
+				additional.data(), additional.size(), nonce);
+		}
+
+		std::vector<uint8_t> decrypt(const void* ciphertext, std::size_t ciphertext_len,
+			const void* additional, std::size_t additional_len)
+		{
+			std::vector<uint8_t> result(1024 * 1024, 0);
+			unsigned long long decrypted_len;
+			auto data_len = ciphertext_len - crypto_aead_xchacha20poly1305_ietf_NPUBBYTES;
+			if (data_len <= 0)
+			{
+				result.resize(0);
+				return result;
+			}
+			auto nonce = &((const unsigned char*)ciphertext)[data_len];
+			auto nonce_obj = bf::object(nonce, crypto_aead_xchacha20poly1305_ietf_NPUBBYTES);
+			if (m_bloom_filter.lookup(nonce_obj))
+			{
+				result.resize(0);
+				return result;
+			}
+			m_bloom_filter.add(nonce_obj);
+			if (crypto_aead_xchacha20poly1305_ietf_decrypt(result.data(), &decrypted_len,
+				NULL, (const unsigned char*)ciphertext, data_len,
+				(const unsigned char*)additional, additional_len, nonce, m_key) != 0)
 			{
 				result.resize(0);
 				return result;
@@ -89,31 +126,8 @@ namespace crypto {
 		std::vector<uint8_t> decrypt(std::vector<uint8_t>& ciphertext,
 			std::vector<uint8_t>& additional)
 		{
-			std::vector<uint8_t> result(1024 * 1024, 0);
-			unsigned long long decrypted_len;
-			auto data_len = ciphertext.size() - crypto_aead_xchacha20poly1305_ietf_NPUBBYTES;
-			if (data_len <= 0)
-			{
-				result.resize(0);
-				return result;
-			}
-			auto nonce = &ciphertext[data_len];
-			auto nonce_obj = bf::object(nonce, crypto_aead_xchacha20poly1305_ietf_NPUBBYTES);
-			if (m_bloom_filter.lookup(nonce_obj))
-			{
-				result.resize(0);
-				return result;
-			}
-			m_bloom_filter.add(nonce_obj);
-			if (crypto_aead_xchacha20poly1305_ietf_decrypt(result.data(), &decrypted_len,
-				NULL, ciphertext.data(), data_len,
-				additional.data(), additional.size(), nonce, m_key) != 0)
-			{
-				result.resize(0);
-				return result;
-			}
-			result.resize(decrypted_len);
-			return result;
+			return decrypt(ciphertext.data(), ciphertext.size(),
+				additional.data(), additional.size());
 		}
 
 		const key_type& key() const
