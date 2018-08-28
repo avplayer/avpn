@@ -102,12 +102,20 @@ namespace crypto {
 			std::vector<uint8_t>& additional,
 			const xchacha20poly1305_nonce& nonce, const xchacha20poly1305_key& key)
 		{
-			std::vector<uint8_t> result(message.size() +
+			return encrypt(message.data(), message.size(),
+				additional.data(), additional.size(), nonce, key);
+		}
+
+		std::vector<uint8_t> encrypt(const void* message, std::size_t message_len,
+			const void* additional, std::size_t additional_len,
+			const xchacha20poly1305_nonce& nonce, const xchacha20poly1305_key& key)
+		{
+			std::vector<uint8_t> result(message_len +
 				crypto_aead_xchacha20poly1305_ietf_ABYTES, 0);
 			unsigned long long ciphertext_len;
 			crypto_aead_xchacha20poly1305_ietf_encrypt(result.data(), &ciphertext_len,
-				message.data(), message.size(),
-				additional.data(), additional.size(),
+				(const unsigned char*)message, message_len,
+				(const unsigned char*)additional, additional_len,
 				NULL, nonce.data(), key.data());
 			result.resize(ciphertext_len);
 			return result;
@@ -117,21 +125,30 @@ namespace crypto {
 		std::vector<uint8_t> encrypt(std::vector<uint8_t>& message,
 			std::vector<uint8_t>& additional, const xchacha20poly1305_key& key)
 		{
-			std::vector<uint8_t> result(message.size() +
+			return encrypt(message.data(), message.size(),
+				additional.data(), additional.size(), key);
+		}
+
+		std::vector<uint8_t> encrypt(const void* message, std::size_t message_len,
+			const void* additional, std::size_t additional_len, const xchacha20poly1305_key& key)
+		{
+			std::vector<uint8_t> result(message_len +
 				crypto_aead_xchacha20poly1305_ietf_ABYTES +
 				crypto_aead_xchacha20poly1305_ietf_NPUBBYTES, 0);
 			unsigned long long ciphertext_len;
-			auto nonce = &result[message.size() +
+			auto nonce = &result[message_len +
 				crypto_aead_xchacha20poly1305_ietf_ABYTES];
 			randombytes_buf(nonce, crypto_aead_xchacha20poly1305_ietf_NPUBBYTES);
 			crypto_aead_xchacha20poly1305_ietf_encrypt(result.data(), &ciphertext_len,
-				message.data(), message.size(),
-				additional.data(), additional.size(),
+				(const unsigned char*)message, message_len,
+				(const unsigned char*)additional, additional_len,
 				NULL, nonce, key.data());
 			std::memmove(&result[ciphertext_len], nonce, crypto_aead_xchacha20poly1305_ietf_NPUBBYTES);
 			result.resize(ciphertext_len + crypto_aead_xchacha20poly1305_ietf_NPUBBYTES);
 			return result;
 		}
+
+		//////////////////////////////////////////////////////////////////////////
 
 		std::vector<uint8_t> decrypt(const void* ciphertext, std::size_t ciphertext_len,
 			const void* additional, std::size_t additional_len,
