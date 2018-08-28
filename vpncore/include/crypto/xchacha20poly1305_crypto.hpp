@@ -156,7 +156,7 @@ namespace crypto {
 		{
 			std::vector<uint8_t> result(1024 * 1024, 0);
 			unsigned long long decrypted_len;
-			if (m_bloom_filter.lookup(nonce.to_string()))
+			if (BOOST_UNLIKELY(m_bloom_filter.lookup(nonce.to_string())))
 			{
 				result.resize(0);
 				return result;
@@ -195,7 +195,7 @@ namespace crypto {
 			}
 			auto nonce = &((const unsigned char*)ciphertext)[data_len];
 			auto nonce_obj = bf::object(nonce, crypto_aead_xchacha20poly1305_ietf_NPUBBYTES);
-			if (m_bloom_filter.lookup(nonce_obj))
+			if (BOOST_UNLIKELY(m_bloom_filter.lookup(nonce_obj)))
 			{
 				result.resize(0);
 				return result;
