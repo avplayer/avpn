@@ -17,6 +17,8 @@ namespace crypto {
 		return result;
 	}
 
+	//////////////////////////////////////////////////////////////////////////
+
 	template <std::size_t N>
 	class xchacha20poly1305_inner_data
 	{
@@ -47,6 +49,8 @@ namespace crypto {
 
 		unsigned char key_[N];
 	};
+
+	//////////////////////////////////////////////////////////////////////////
 
 	class xchacha20poly1305_key
 		: public xchacha20poly1305_inner_data<crypto_aead_xchacha20poly1305_ietf_KEYBYTES>
@@ -80,6 +84,8 @@ namespace crypto {
 		}
 	};
 
+	//////////////////////////////////////////////////////////////////////////
+
 	class xchacha20poly1305_crypto
 	{
 		// c++11 noncopyable.
@@ -88,7 +94,7 @@ namespace crypto {
 
 	public:
 		xchacha20poly1305_crypto()
-			: m_bloom_filter(0.4, 100000000)
+			: m_bloom_filter(0.4, 10000000)
 		{
 			if (sodium_init() == -1)
 				LOG_ERR << "sodium_init fail!";
@@ -221,6 +227,13 @@ namespace crypto {
 		}
 
 	private:
+		// 使用 nonce窗口方式 还是 bloom_filter 好?
+		// 2个方案都有一定的问题.
+		// nonce窗口, 保持一个窗口大小, 将超过大小的
+		// nonce移出窗口容器, 这样会有一个问题, 移出
+		// 的 nonce 可能会被攻击者使用.
+		// bloom_filter, 随着时间的推移, 会导致出现
+		// 误判的情况, 主要取决于bloom_filter的大小.
 		bf::basic_bloom_filter m_bloom_filter;
 	};
 }

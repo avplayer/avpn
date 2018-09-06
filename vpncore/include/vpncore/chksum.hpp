@@ -1,4 +1,5 @@
-﻿#pragma once
+﻿// Based on src/core/inet_chksum.c
+#pragma once
 
 #include <cinttypes>
 
