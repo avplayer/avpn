@@ -19,10 +19,10 @@ tap-windows-9.21.2.exe
 冲突，我将其重命名为 VPN01（具体操作就是在 控制面板\网络和 Internet\网络连接 找到这个设备，
 然后右击选择重命名）。
 
-然后编译该项目，生成 avpn.exe
+然后编译该项目，生成 tun2socks.exe
 执行命令
 
-avpn.exe 虚拟网卡的名字 socks5://1.1.1.1:1080
+tun2socks.exe 虚拟网卡的名字 socks5://1.1.1.1:1080
 
 便可启动avpn
 
