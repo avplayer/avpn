@@ -395,9 +395,9 @@ namespace tuntap_service {
 
 				// if (cfg.ifconfig_setup_)
 				{
-					auto ep1 = boost::asio::ip::address_v4(htonl(tun_addrs[1]));
-					auto ep0 = boost::asio::ip::address_v4(htonl(tun_addrs[0]));
-					auto ep2 = boost::asio::ip::address_v4(htonl(tun_addrs[2]));
+					auto ep1 = boost::asio::ip::address_v4(ntohl(tun_addrs[1]));
+					auto ep0 = boost::asio::ip::address_v4(ntohl(tun_addrs[0]));
+					auto ep2 = boost::asio::ip::address_v4(ntohl(tun_addrs[2]));
 					LOG_DBG << "Set TAP-Windows TUN subnet mode network/local/netmask = " <<
 						ep1.to_string() << "/" << ep0.to_string() << "/" << ep2.to_string();
 				}
