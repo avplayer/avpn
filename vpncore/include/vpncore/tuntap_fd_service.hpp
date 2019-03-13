@@ -22,7 +22,6 @@
 #ifdef AVPN_LINUX
 extern "C" {
 #include <linux/if_tun.h>
-
 #include <asm/types.h>
 #include <libnetlink.h>
 #include <linux/netlink.h>
@@ -66,6 +65,30 @@ static const char			drv_name[] = "tun";
 #include "vpncore/logging.hpp"
 #include "vpncore/tuntap_config.hpp"
 
+
+
+static int rtnl_wilddump_request(struct rtnl_handle *rth, int family, int type)
+{
+struct {
+struct nlmsghdr nlh;
+struct rtgenmsg g;
+} req;
+struct sockaddr_nl nladdr;
+
+memset(&nladdr, 0, sizeof(nladdr));
+nladdr.nl_family = AF_NETLINK;
+
+memset(&req, 0, sizeof(req));
+req.nlh.nlmsg_len = sizeof(req);
+req.nlh.nlmsg_type = type;
+req.nlh.nlmsg_flags = NLM_F_ROOT | NLM_F_MATCH | NLM_F_REQUEST;
+req.nlh.nlmsg_pid = 0;
+req.nlh.nlmsg_seq = rth->dump = ++rth->seq;
+req.g.rtgen_family = family;
+
+return sendto(rth->fd, (void *)&req, sizeof(req), 0,
+(struct sockaddr *)&nladdr, sizeof(nladdr));
+}
 
 namespace tuntap_service {
 	namespace posix = boost::asio::posix;
@@ -384,16 +407,14 @@ namespace tuntap_service {
 
 #ifdef AVPN_LINUX
 		// friend
-		static int list_tuntap_func(const struct sockaddr_nl *who,
-			struct nlmsghdr *n, void *arg)
+		static int list_tuntap_func(struct nlmsghdr *n, void *arg)
 		{
 			auto pthis = (tuntap_fd_service*)arg;
-			return pthis->list_tuntap(who, n);
+			return pthis->list_tuntap(n);
 		}
 #endif
 
-		int list_tuntap(const struct sockaddr_nl *who,
-			struct nlmsghdr *n)
+		int list_tuntap(struct nlmsghdr *n)
 		{
 #ifdef AVPN_LINUX
 			struct ifinfomsg *ifi = (struct ifinfomsg*)NLMSG_DATA(n);
