@@ -67,7 +67,7 @@ static const char			drv_name[] = "tun";
 
 
 
-static int rtnl_wilddump_request(struct rtnl_handle *rth, int family, int type)
+static int rtnl_wilddump_request_old(struct rtnl_handle *rth, int family, int type)
 {
 struct {
 struct nlmsghdr nlh;
@@ -399,7 +399,7 @@ namespace tuntap_service {
 				return;
 			if (rtnl_wilddump_request(&rth, AF_UNSPEC, RTM_GETLINK) < 0)
 				return;
-			if (rtnl_dump_filter(&rth, list_tuntap_func, (void*)this) < 0)
+			if (rtnl_dump_filter_nc(&rth, list_tuntap_func, (void*)this, 0) < 0)
 				return;
 			rtnl_close(&rth);
 #endif
@@ -407,7 +407,7 @@ namespace tuntap_service {
 
 #ifdef AVPN_LINUX
 		// friend
-		static int list_tuntap_func(struct nlmsghdr *n, void *arg)
+		static int list_tuntap_func(const struct sockaddr_nl *, struct nlmsghdr *n, void *arg)
 		{
 			auto pthis = (tuntap_fd_service*)arg;
 			return pthis->list_tuntap(n);
