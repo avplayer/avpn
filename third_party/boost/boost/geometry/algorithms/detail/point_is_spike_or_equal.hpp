@@ -5,8 +5,8 @@
 // Copyright (c) 2009-2015 Mateusz Loskot, London, UK.
 // Copyright (c) 2013-2015 Adam Wulkiewicz, Lodz, Poland.
 
-// This file was modified by Oracle on 2015, 2017.
-// Modifications copyright (c) 2015-2017 Oracle and/or its affiliates.
+// This file was modified by Oracle on 2015, 2017, 2019.
+// Modifications copyright (c) 2015-2019 Oracle and/or its affiliates.
 
 // Contributed and/or modified by Menelaos Karavelas, on behalf of Oracle
 // Contributed and/or modified by Adam Wulkiewicz, on behalf of Oracle
@@ -75,6 +75,8 @@ inline bool point_is_spike_or_equal(Point1 const& last_point, // prev | back
                                     Point3 const& segment_b,  // curr | back - 1 | spike's vertex
                                     SideStrategy const& strategy)
 {
+    typedef typename SideStrategy::cs_tag cs_tag;
+
     int const side = strategy.apply(segment_a, segment_b, last_point);
     if (side == 0)
     {
@@ -86,7 +88,7 @@ inline bool point_is_spike_or_equal(Point1 const& last_point, // prev | back
             std::cout << "spike detection failure with: " << r1 << " " << r2 << std::endl;
         return r2;
 #else
-        return direction_code(segment_a, segment_b, last_point) < 1;
+        return direction_code<cs_tag>(segment_a, segment_b, last_point) < 1;
 #endif
     }
     return false;
@@ -179,6 +181,26 @@ inline bool point_is_collinear(Point1 const& last_point,
     int const side_rob = strategy.apply(segment_a_rob, segment_b_rob, last_point_rob);
     return side_rob == 0;
 }
+
+
+//! Version with intuitive order (A, B, C). The original order was
+//! unclear (C, A, B). It was used in a different way in has_spikes.
+//! On longer term the C,A,B version can be deprecated
+template
+<
+    typename Point1,
+    typename Point2,
+    typename Point3,
+    typename SideStrategy
+>
+inline bool is_spike_or_equal(Point1 const& a,
+            Point2 const& b,
+            Point3 const& c,
+            SideStrategy const& strategy)
+{
+    return point_is_spike_or_equal(c, a, b, strategy);
+}
+
 
 } // namespace detail
 #endif

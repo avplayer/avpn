@@ -1,7 +1,7 @@
 ///////////////////////////////////////////////////////////////
 //  Copyright 2015 John Maddock. Distributed under the Boost
 //  Software License, Version 1.0. (See accompanying file
-//  LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_
+//  LICENSE_1_0.txt or copy at https://www.boost.org/LICENSE_1_0.txt
 
 #ifndef BOOST_MP_CPP_INT_IMPORT_EXPORT_HPP
 #define BOOST_MP_CPP_INT_IMPORT_EXPORT_HPP
@@ -169,7 +169,7 @@ namespace boost {
          import_bits(
             number<cpp_int_backend<MinBits, MaxBits, SignType, Checked, Allocator>, ExpressionTemplates>& val, T* i, T* j, unsigned chunk_size = 0, bool msv_first = true)
       {
-#ifdef BOOST_LITTLE_ENDIAN
+#if BOOST_ENDIAN_LITTLE_BYTE
          if(((chunk_size % CHAR_BIT) == 0) && !msv_first)
             return detail::import_bits_fast(val, i, j, chunk_size);
 #endif

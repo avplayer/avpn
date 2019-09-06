@@ -205,28 +205,8 @@ public:
         return nullptr == fctx_;
     }
 
-    bool operator==( execution_context const& other) const noexcept {
-        return fctx_ == other.fctx_;
-    }
-
-    bool operator!=( execution_context const& other) const noexcept {
-        return fctx_ != other.fctx_;
-    }
-
     bool operator<( execution_context const& other) const noexcept {
         return fctx_ < other.fctx_;
-    }
-
-    bool operator>( execution_context const& other) const noexcept {
-        return other.fctx_ < fctx_;
-    }
-
-    bool operator<=( execution_context const& other) const noexcept {
-        return ! ( * this > other);
-    }
-
-    bool operator>=( execution_context const& other) const noexcept {
-        return ! ( * this < other);
     }
 
     template< typename charT, class traitsT >
@@ -256,6 +236,10 @@ transfer_t ecv2_context_ontop_void( transfer_t t) {
     try {
         // execute function
         fn();
+#if defined( BOOST_CONTEXT_HAS_CXXABI_H )
+    } catch ( abi::__forced_unwind const&) {
+        throw;
+#endif
     } catch (...) {
         std::get< 1 >( * p) = std::current_exception();
         return { t.fctx, & std::get< 1 >( * p ) };

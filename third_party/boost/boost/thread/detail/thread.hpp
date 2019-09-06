@@ -18,6 +18,9 @@
 #if defined BOOST_THREAD_USES_DATETIME
 #include <boost/thread/xtime.hpp>
 #endif
+#if defined BOOST_THREAD_PROVIDES_INTERRUPTIONS
+#include <boost/thread/interruption.hpp>
+#endif
 #include <boost/thread/detail/thread_heap_alloc.hpp>
 #include <boost/thread/detail/make_tuple_indices.hpp>
 #include <boost/thread/detail/invoke.hpp>
@@ -587,14 +590,8 @@ namespace boost
         thread::id BOOST_THREAD_DECL get_id() BOOST_NOEXCEPT;
 #endif
 
-#if defined BOOST_THREAD_PROVIDES_INTERRUPTIONS
-        void BOOST_THREAD_DECL interruption_point();
-        bool BOOST_THREAD_DECL interruption_enabled() BOOST_NOEXCEPT;
-        bool BOOST_THREAD_DECL interruption_requested() BOOST_NOEXCEPT;
-#endif
-
 #if defined BOOST_THREAD_USES_DATETIME
-        inline BOOST_SYMBOL_VISIBLE void sleep(xtime const& abs_time)
+        inline BOOST_SYMBOL_VISIBLE void sleep(::boost::xtime const& abs_time)
         {
             sleep(system_time(abs_time));
         }
@@ -811,6 +808,7 @@ namespace boost
         };
 
         void BOOST_THREAD_DECL add_thread_exit_function(thread_exit_function_base*);
+//#ifndef BOOST_NO_EXCEPTIONS
         struct shared_state_base;
 #if defined(BOOST_THREAD_PLATFORM_WIN32)
         inline void make_ready_at_thread_exit(shared_ptr<shared_state_base> as)
@@ -824,6 +822,7 @@ namespace boost
 #else
         void BOOST_THREAD_DECL make_ready_at_thread_exit(shared_ptr<shared_state_base> as);
 #endif
+//#endif
     }
 
     namespace this_thread

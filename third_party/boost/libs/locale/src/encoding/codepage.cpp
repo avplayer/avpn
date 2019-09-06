@@ -40,18 +40,20 @@ namespace boost {
                                             char const *from_charset,
                                             method_type how)
                 {
-                    hold_ptr<converter_between> cvt;
                     #ifdef BOOST_LOCALE_WITH_ICONV
+                    hold_ptr<converter_between> cvt;
                     cvt.reset(new iconv_between());
                     if(cvt->open(to_charset,from_charset,how))
                         return cvt->convert(begin,end);
                     #endif
                     #ifdef BOOST_LOCALE_WITH_ICU
+                    hold_ptr<converter_between> cvt;
                     cvt.reset(new uconv_between());
                     if(cvt->open(to_charset,from_charset,how))
                         return cvt->convert(begin,end);
                     #endif
                     #ifdef BOOST_LOCALE_WITH_WCONV
+                    hold_ptr<converter_between> cvt;
                     cvt.reset(new wconv_between());
                     if(cvt->open(to_charset,from_charset,how))
                         return cvt->convert(begin,end);
@@ -66,18 +68,20 @@ namespace boost {
                                         char const *charset,
                                         method_type how)
                 {
-                    hold_ptr<converter_to_utf<CharType> > cvt;
                     #ifdef BOOST_LOCALE_WITH_ICONV
+                    hold_ptr<converter_to_utf<CharType> > cvt;
                     cvt.reset(new iconv_to_utf<CharType>());
                     if(cvt->open(charset,how))
                         return cvt->convert(begin,end);
                     #endif
                     #ifdef BOOST_LOCALE_WITH_ICU
+                    hold_ptr<converter_to_utf<CharType> > cvt;
                     cvt.reset(new uconv_to_utf<CharType>());
                     if(cvt->open(charset,how))
                         return cvt->convert(begin,end);
                     #endif
                     #ifdef BOOST_LOCALE_WITH_WCONV
+                    hold_ptr<converter_to_utf<CharType> > cvt;
                     cvt.reset(new wconv_to_utf<CharType>());
                     if(cvt->open(charset,how))
                         return cvt->convert(begin,end);
@@ -92,18 +96,20 @@ namespace boost {
                                         char const *charset,
                                         method_type how)
                 {
-                    hold_ptr<converter_from_utf<CharType> > cvt;
                     #ifdef BOOST_LOCALE_WITH_ICONV
+                    hold_ptr<converter_from_utf<CharType> > cvt;
                     cvt.reset(new iconv_from_utf<CharType>());
                     if(cvt->open(charset,how))
                         return cvt->convert(begin,end);
                     #endif
                     #ifdef BOOST_LOCALE_WITH_ICU
+                    hold_ptr<converter_from_utf<CharType> > cvt;
                     cvt.reset(new uconv_from_utf<CharType>());
                     if(cvt->open(charset,how))
                         return cvt->convert(begin,end);
                     #endif
                     #ifdef BOOST_LOCALE_WITH_WCONV
+                    hold_ptr<converter_from_utf<CharType> > cvt;
                     cvt.reset(new wconv_from_utf<CharType>());
                     if(cvt->open(charset,how))
                         return cvt->convert(begin,end);

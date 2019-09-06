@@ -1,7 +1,7 @@
 ///////////////////////////////////////////////////////////////
 //  Copyright 2012 John Maddock. Distributed under the Boost
 //  Software License, Version 1.0. (See accompanying file
-//  LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_
+//  LICENSE_1_0.txt or copy at https://www.boost.org/LICENSE_1_0.txt
 
 #ifndef BOOST_MATH_DEBUG_ADAPTER_HPP
 #define BOOST_MATH_DEBUG_ADAPTER_HPP
@@ -120,7 +120,7 @@ public:
    template <class Archive>
    void serialize(Archive& ar, const unsigned int /*version*/)
    {
-      ar & m_value;
+      ar & boost::serialization::make_nvp("value", m_value);
       typedef typename Archive::is_loading tag;
       if(tag::value)
          update_view();
@@ -422,7 +422,7 @@ inline void eval_bit_flip(const debug_adaptor<Backend>& arg, unsigned a)
 
 NON_MEMBER_OP3(gcd, "gcd")
 NON_MEMBER_OP3(lcm, "lcm")
-NON_MEMBER_OP4(powm, "powm");
+NON_MEMBER_OP4(powm, "powm")
 
 /*********************************************************************
 *

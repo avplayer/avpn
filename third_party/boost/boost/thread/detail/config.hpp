@@ -11,6 +11,7 @@
 #include <boost/config.hpp>
 #include <boost/detail/workaround.hpp>
 #include <boost/thread/detail/platform.hpp>
+#include <boost/thread/detail/thread_safety.hpp>
 
 //#define BOOST_THREAD_DONT_PROVIDE_INTERRUPTIONS
 // ATTRIBUTE_MAY_ALIAS
@@ -44,7 +45,7 @@
 # elif defined( BOOST_THREAD_CHRONO_MAC_API ) && defined( BOOST_THREAD_CHRONO_POSIX_API )
 #   error both BOOST_THREAD_CHRONO_MAC_API and BOOST_THREAD_CHRONO_POSIX_API are defined
 # elif !defined( BOOST_THREAD_CHRONO_WINDOWS_API ) && !defined( BOOST_THREAD_CHRONO_MAC_API ) && !defined( BOOST_THREAD_CHRONO_POSIX_API )
-#   if (defined(_WIN32) || defined(__WIN32__) || defined(WIN32))
+#   if defined(BOOST_THREAD_PLATFORM_WIN32)
 #     define BOOST_THREAD_CHRONO_WINDOWS_API
 #   elif defined(macintosh) || defined(__APPLE__) || defined(__APPLE_CC__)
 #     define BOOST_THREAD_CHRONO_MAC_API
@@ -337,10 +338,18 @@
 
 #if BOOST_THREAD_VERSION>=5
 //#define BOOST_THREAD_FUTURE_BLOCKING
+
+#if ! defined BOOST_THREAD_PROVIDES_EXECUTORS \
+ && ! defined BOOST_THREAD_DONT_PROVIDE_EXECUTORS
+#define BOOST_THREAD_PROVIDES_EXECUTORS
+#endif
+
 #else
 //#define BOOST_THREAD_FUTURE_BLOCKING
 #define BOOST_THREAD_ASYNC_FUTURE_WAITS
 #endif
+
+
 // INTERRUPTIONS
 #if ! defined BOOST_THREAD_PROVIDES_INTERRUPTIONS \
  && ! defined BOOST_THREAD_DONT_PROVIDE_INTERRUPTIONS
@@ -417,6 +426,11 @@
   #define BOOST_THREAD_INTERNAL_CLOCK_IS_MONO
 #elif defined(BOOST_THREAD_CHRONO_MAC_API)
   #define BOOST_THREAD_HAS_MONO_CLOCK
+#elif defined(__ANDROID__)
+  #define BOOST_THREAD_HAS_MONO_CLOCK
+  #if defined(__ANDROID_API__) && __ANDROID_API__ >= 21
+    #define BOOST_THREAD_INTERNAL_CLOCK_IS_MONO
+  #endif
 #else
   #include <time.h> // check for CLOCK_MONOTONIC
   #if defined(CLOCK_MONOTONIC)

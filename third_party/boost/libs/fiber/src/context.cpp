@@ -39,7 +39,7 @@ private:
     }
 
 public:
-    dispatcher_context( boost::context::preallocated const& palloc, default_stack const& salloc) :
+    dispatcher_context( boost::context::preallocated const& palloc, default_stack && salloc) :
         context{ 0, type::dispatcher_context, launch::post } {
         c_ = boost::context::fiber{ std::allocator_arg, palloc, salloc,
                                     std::bind( & dispatcher_context::run_, this, std::placeholders::_1) };
@@ -62,7 +62,7 @@ static intrusive_ptr< context > make_dispatcher_context() {
     // placement new of context on top of fiber's stack
     return intrusive_ptr< context >{
         new ( storage) dispatcher_context{
-                boost::context::preallocated{ storage, size, sctx }, salloc } };
+                boost::context::preallocated{ storage, size, sctx }, std::move( salloc) } };
 }
 
 // schwarz counter
@@ -311,11 +311,7 @@ context::set_fss_data( void const * vp,
             i->second.do_cleanup();
         }
         if ( nullptr != data) {
-            fss_data_.insert(
-                    i,
-                    std::make_pair(
-                        key,
-                        fss_data{ data, cleanup_fn } ) );
+            i->second = fss_data{ data, cleanup_fn };
         } else {
             fss_data_.erase( i);
         }

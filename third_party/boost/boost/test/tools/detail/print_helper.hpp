@@ -18,7 +18,6 @@
 // Boost.Test
 #include <boost/test/detail/config.hpp>
 #include <boost/test/detail/global_typedef.hpp>
-#include <boost/test/detail/workaround.hpp>
 
 // Boost
 #include <boost/mpl/or.hpp>
@@ -28,6 +27,8 @@
 #include <boost/type_traits/is_abstract.hpp>
 #include <boost/type_traits/has_left_shift.hpp>
 
+#include <ios>
+#include <iostream>
 #include <limits>
 
 #if !defined(BOOST_NO_CXX11_NULLPTR)

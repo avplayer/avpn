@@ -8,6 +8,7 @@
 #include <boost/mpi/environment.hpp>
 #include <boost/mpi/exception.hpp>
 #include <boost/mpi/detail/mpi_datatype_cache.hpp>
+#include <boost/core/uncaught_exceptions.hpp>
 #include <cassert>
 #include <string>
 #include <exception>
@@ -137,7 +138,7 @@ environment::environment(int& argc, char** &argv, threading::level mt_level,
 environment::~environment()
 {
   if (i_initialized) {
-    if (std::uncaught_exception() && abort_on_exception) {
+    if (boost::core::uncaught_exceptions() > 0 && abort_on_exception) {
       abort(-1);
     } else if (!finalized()) {
       detail::mpi_datatype_cache().clear();

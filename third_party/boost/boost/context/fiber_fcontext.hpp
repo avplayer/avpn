@@ -78,8 +78,11 @@ void fiber_entry( transfer_t t) noexcept {
         t = jump_fcontext( t.fctx, nullptr);
         // start executing
         t.fctx = rec->run( t.fctx);
-    } catch ( forced_unwind const& e) {
-        t = { e.fctx, nullptr };
+    } catch ( forced_unwind const& ex) {
+        t = { ex.fctx, nullptr };
+#ifndef BOOST_ASSERT_IS_VOID
+        const_cast< forced_unwind & >( ex).caught = true;
+#endif
     }
     BOOST_ASSERT( nullptr != t.fctx);
     // destroy context-stack of `this`context on next context
@@ -89,12 +92,11 @@ void fiber_entry( transfer_t t) noexcept {
 
 template< typename Ctx, typename Fn >
 transfer_t fiber_ontop( transfer_t t) {
-    auto p = static_cast< std::tuple< Fn > * >( t.data);
-    BOOST_ASSERT( nullptr != p);
-    typename std::decay< Fn >::type fn = std::get< 0 >( * p);
+    BOOST_ASSERT( nullptr != t.data);
+    auto p = *static_cast< Fn * >( t.data);
     t.data = nullptr;
     // execute function, pass fiber via reference
-    Ctx c = fn( Ctx{ t.fctx } );
+    Ctx c = p( Ctx{ t.fctx } );
 #if defined(BOOST_NO_CXX14_STD_EXCHANGE)
     return { exchange( c.fctx_, nullptr), nullptr };
 #else
@@ -289,7 +291,7 @@ public:
     template< typename Fn >
     fiber resume_with( Fn && fn) && {
         BOOST_ASSERT( nullptr != fctx_);
-        auto p = std::make_tuple( std::forward< Fn >( fn) );
+        auto p = std::forward< Fn >( fn);
         return { detail::ontop_fcontext(
 #if defined(BOOST_NO_CXX14_STD_EXCHANGE)
                     detail::exchange( fctx_, nullptr),
@@ -297,7 +299,7 @@ public:
                     std::exchange( fctx_, nullptr),
 #endif
                     & p,
-                    detail::fiber_ontop< fiber, Fn >).fctx };
+                    detail::fiber_ontop< fiber, decltype(p) >).fctx };
     }
 
     explicit operator bool() const noexcept {
@@ -308,28 +310,8 @@ public:
         return nullptr == fctx_;
     }
 
-    bool operator==( fiber const& other) const noexcept {
-        return fctx_ == other.fctx_;
-    }
-
-    bool operator!=( fiber const& other) const noexcept {
-        return fctx_ != other.fctx_;
-    }
-
     bool operator<( fiber const& other) const noexcept {
         return fctx_ < other.fctx_;
-    }
-
-    bool operator>( fiber const& other) const noexcept {
-        return other.fctx_ < fctx_;
-    }
-
-    bool operator<=( fiber const& other) const noexcept {
-        return ! ( * this > other);
-    }
-
-    bool operator>=( fiber const& other) const noexcept {
-        return ! ( * this < other);
     }
 
     template< typename charT, class traitsT >
@@ -351,6 +333,8 @@ inline
 void swap( fiber & l, fiber & r) noexcept {
     l.swap( r);
 }
+
+typedef fiber fiber_context;
 
 }}
 

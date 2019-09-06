@@ -23,7 +23,11 @@
 #include <wctype.h>
 #include <ctype.h>
 #include <langinfo.h>
+
+#ifndef __ANDROID_API__
 #include <monetary.h>
+#endif
+
 #include <errno.h>
 #include "../util/numeric.hpp"
 #include "all_generator.hpp"
@@ -54,6 +58,7 @@ protected:
 
     virtual iter_type do_format_currency(bool intl,iter_type out,std::ios_base &/*ios*/,char_type /*fill*/,long double val) const
     {
+    #ifndef __ANDROID_API__
         char buf[4]={};
         char const *format = intl ? "%i" : "%n";
         errno=0;
@@ -66,6 +71,7 @@ protected:
             if(n >= 0)
                 return write_it(out,&tmp.front(),n);
         }
+    #endif
         return out;
     }
 

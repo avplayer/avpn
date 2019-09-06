@@ -2,6 +2,7 @@
 
 //  (C) Copyright Darin Adler 2000
 //  (C) Copyright Beman Dawes 2006, 2009, 2014
+//  (C) Copyright Peter Dimov 2019
 
 //  Distributed under the Boost Software License, Version 1.0.
 //  See http://www.boost.org/LICENSE_1_0.txt
@@ -23,31 +24,24 @@
 
 #if defined(_MSC_VER)
 # pragma warning(push)
-# pragma warning(disable:4365)  // conversion ... signed/unsigned mismatch
+# pragma warning(disable: 4127)  // conditional expression is constant
 #endif
 
-#ifdef BOOST_ENDIAN_LOG
-# include <iostream>
-#endif
+#include <boost/endian/detail/endian_store.hpp>
+#include <boost/endian/detail/endian_load.hpp>
+#include <boost/core/scoped_enum.hpp>
+#include <boost/predef/other/endian.h>
+#include <boost/static_assert.hpp>
+#include <boost/cstdint.hpp>
+#include <boost/config.hpp>
+#include <boost/config/workaround.hpp>
+#include <iosfwd>
+#include <climits>
+#include <cstring>
 
 #if defined(__BORLANDC__) || defined( __CODEGEARC__)
 # pragma pack(push, 1)
 #endif
-
-#include <boost/config.hpp>
-#include <boost/predef/detail/endian_compat.h>
-#include <boost/endian/conversion.hpp>
-#include <boost/type_traits/is_signed.hpp>
-#include <boost/type_traits/make_unsigned.hpp>
-#include <boost/type_traits/conditional.hpp>
-#include <boost/type_traits/is_integral.hpp>
-#include <boost/type_traits/type_identity.hpp>
-#include <boost/cstdint.hpp>
-#include <boost/static_assert.hpp>
-#include <boost/core/scoped_enum.hpp>
-#include <iosfwd>
-#include <climits>
-#include <cstring>
 
 # if CHAR_BIT != 8
 #   error Platforms with CHAR_BIT != 8 are not supported
@@ -59,7 +53,8 @@
 #   define BOOST_ENDIAN_DEFAULT_CONSTRUCT = default;  // C++0x
 # endif
 
-# if defined(BOOST_NO_CXX11_DEFAULTED_FUNCTIONS) && defined(BOOST_ENDIAN_FORCE_PODNESS)
+// g++ pre-4.6 does not support unrestricted unions, but we have no Config macro for that
+# if (defined(BOOST_NO_CXX11_DEFAULTED_FUNCTIONS) || BOOST_WORKAROUND(BOOST_GCC, < 40600)) && defined(BOOST_ENDIAN_FORCE_PODNESS)
 #   define BOOST_ENDIAN_NO_CTORS
 # endif
 
@@ -148,7 +143,7 @@ namespace endian
   typedef endian_buffer<order::little, uint_least64_t, 56>  little_uint56_buf_t;
   typedef endian_buffer<order::little, uint_least64_t, 64>  little_uint64_buf_t;
 
-# ifdef BOOST_BIG_ENDIAN
+# if BOOST_ENDIAN_BIG_BYTE
   // unaligned native endian signed integer buffers
   typedef big_int8_buf_t   native_int8_buf_t;
   typedef big_int16_buf_t  native_int16_buf_t;
@@ -215,311 +210,153 @@ namespace endian
 
 //----------------------------------  end synopsis  ------------------------------------//
 
-  namespace detail
-  {
-
-    // Unrolled loops for loading and storing streams of bytes.
-
-    template <typename T, std::size_t n_bytes,
-      bool sign=boost::is_signed<T>::value >
-    struct unrolled_byte_loops
-    {
-      typedef unrolled_byte_loops<T, n_bytes - 1, sign> next;
-
-      // shifting a negative number is flagged by -fsanitize=undefined
-      // so use the corresponding unsigned type for the shifts
-
-      typedef typename boost::conditional<
-        boost::is_integral<T>::value,
-        boost::make_unsigned<T>, boost::type_identity<T> >::type::type U;
-
-      static T load_big(const unsigned char* bytes) BOOST_NOEXCEPT
-        { return static_cast<T>(*(bytes - 1) | (static_cast<U>(next::load_big(bytes - 1)) << 8)); }
-      static T load_little(const unsigned char* bytes) BOOST_NOEXCEPT
-        { return static_cast<T>(*bytes | (static_cast<U>(next::load_little(bytes + 1)) << 8)); }
-
-      static void store_big(char* bytes, T value) BOOST_NOEXCEPT
-        {
-          *(bytes - 1) = static_cast<char>(value);
-          next::store_big(bytes - 1, static_cast<T>(static_cast<U>(value) >> 8));
-        }
-      static void store_little(char* bytes, T value) BOOST_NOEXCEPT
-        {
-          *bytes = static_cast<char>(value);
-          next::store_little(bytes + 1, static_cast<T>(static_cast<U>(value) >> 8));
-        }
-    };
-
-    template <typename T>
-    struct unrolled_byte_loops<T, 1, false>
-    {
-      static T load_big(const unsigned char* bytes) BOOST_NOEXCEPT
-        { return *(bytes - 1); }
-      static T load_little(const unsigned char* bytes) BOOST_NOEXCEPT
-        { return *bytes; }
-      static void store_big(char* bytes, T value) BOOST_NOEXCEPT
-        { *(bytes - 1) = static_cast<char>(value); }
-      static void store_little(char* bytes, T value) BOOST_NOEXCEPT
-        { *bytes = static_cast<char>(value); }
-
-    };
-
-    template <typename T>
-    struct unrolled_byte_loops<T, 1, true>
-    {
-      static T load_big(const unsigned char* bytes) BOOST_NOEXCEPT
-        { return *reinterpret_cast<const signed char*>(bytes - 1); }
-      static T load_little(const unsigned char* bytes) BOOST_NOEXCEPT
-        { return *reinterpret_cast<const signed char*>(bytes); }
-      static void store_big(char* bytes, T value)  BOOST_NOEXCEPT
-        { *(bytes - 1) = static_cast<char>(value); }
-      static void store_little(char* bytes, T value) BOOST_NOEXCEPT
-        { *bytes = static_cast<char>(value); }
-    };
-
-    template <typename T, std::size_t n_bytes>
-    inline
-    T load_big_endian(const void* bytes) BOOST_NOEXCEPT
-    {
-      return unrolled_byte_loops<T, n_bytes>::load_big
-        (static_cast<const unsigned char*>(bytes) + n_bytes);
-    }
-
-    template <typename T, std::size_t n_bytes>
-    inline
-    T load_little_endian(const void* bytes) BOOST_NOEXCEPT
-    {
-#   if defined(__x86_64__) || defined(_M_X64) || defined(__i386) || defined(_M_IX86)
-      // On x86 (which is little endian), unaligned loads are permitted
-      if (sizeof(T) == n_bytes)  // GCC 4.9, VC++ 14.0, and probably others, elide this
-                                 // test and generate code only for the applicable return
-                                 // case since sizeof(T) and n_bytes are known at compile
-                                 // time.
-      {
-        // Avoids -fsanitize=undefined violations due to unaligned loads
-        // All major x86 compilers optimize a short-sized memcpy into a single instruction
-
-        T t;
-        std::memcpy( &t, bytes, sizeof(T) );
-        return t;
-      }
-#   endif
-      return unrolled_byte_loops<T, n_bytes>::load_little
-        (static_cast<const unsigned char*>(bytes));
-    }
-
-    template <typename T, std::size_t n_bytes>
-    inline
-    void store_big_endian(void* bytes, T value) BOOST_NOEXCEPT
-    {
-      unrolled_byte_loops<T, n_bytes>::store_big
-        (static_cast<char*>(bytes) + n_bytes, value);
-    }
-
-    template <typename T, std::size_t n_bytes>
-    inline
-    void store_little_endian(void* bytes, T value) BOOST_NOEXCEPT
-    {
-#     if defined(__x86_64__) || defined(_M_X64) || defined(__i386) || defined(_M_IX86)
-      // On x86 (which is little endian), unaligned stores are permitted
-      if (sizeof(T) == n_bytes)  // GCC 4.9, VC++ 14.0, and probably others, elide this
-                                 // test and generate code only for the applicable return
-                                 // case since sizeof(T) and n_bytes are known at compile
-                                 // time.
-      {
-        // Avoids -fsanitize=undefined violations due to unaligned stores
-        // All major x86 compilers optimize a short-sized memcpy into a single instruction
-
-        std::memcpy( bytes, &value, sizeof(T) );
-        return;
-      }
-#     endif
-      unrolled_byte_loops<T, n_bytes>::store_little
-        (static_cast<char*>(bytes), value);
-    }
-
-  } // namespace detail
-
-# ifdef BOOST_ENDIAN_LOG
-    bool endian_log(true);
-# endif
-
 //  endian_buffer class template specializations  --------------------------------------//
 
-    //  Specializations that represent unaligned bytes.
-    //  Taking an integer type as a parameter provides a nice way to pass both
-    //  the size and signedness of the desired integer and get the appropriate
-    //  corresponding integer type for the interface.
+//  Specializations that represent unaligned bytes.
+//  Taking an integer type as a parameter provides a nice way to pass both
+//  the size and signedness of the desired integer and get the appropriate
+//  corresponding integer type for the interface.
 
-    // Q: Should endian_buffer supply "value_type operator value_type() const noexcept"?
-    // A: No. The rationale for endian_buffers is to prevent high-cost hidden
-    //    conversions. If an implicit conversion operator is supplied, hidden conversions
-    //    can occur.
+// Q: Should endian_buffer supply "value_type operator value_type() const noexcept"?
+// A: No. The rationale for endian_buffers is to prevent high-cost hidden
+//    conversions. If an implicit conversion operator is supplied, hidden conversions
+//    can occur.
 
-    //  unaligned big endian_buffer specialization
-    template <typename T, std::size_t n_bits>
-    class endian_buffer< order::big, T, n_bits, align::no >
+//  unaligned endian_buffer specialization
+
+template< BOOST_SCOPED_ENUM(order) Order, class T, std::size_t n_bits >
+class endian_buffer<Order, T, n_bits, align::no>
+{
+private:
+
+    BOOST_STATIC_ASSERT( (n_bits/8)*8 == n_bits );
+
+    unsigned char value_[ n_bits / 8 ];
+
+public:
+
+    typedef T value_type;
+
+#ifndef BOOST_ENDIAN_NO_CTORS
+
+    endian_buffer() BOOST_ENDIAN_DEFAULT_CONSTRUCT
+
+    explicit endian_buffer( T val ) BOOST_NOEXCEPT
     {
-        BOOST_STATIC_ASSERT( (n_bits/8)*8 == n_bits );
-      public:
-        typedef T value_type;
-#     ifndef BOOST_ENDIAN_NO_CTORS
-        endian_buffer() BOOST_ENDIAN_DEFAULT_CONSTRUCT
-        explicit endian_buffer(T val) BOOST_NOEXCEPT
-        {
-#       ifdef BOOST_ENDIAN_LOG
-          if ( endian_log )
-            std::cout << "big, unaligned, "
-              << n_bits << "-bits, construct(" << val << ")\n";
-#       endif
-          detail::store_big_endian<T, n_bits/8>(m_value, val);
-        }
-#     endif
-        endian_buffer & operator=(T val) BOOST_NOEXCEPT
-        {
-#       ifdef BOOST_ENDIAN_LOG
-          if (endian_log)
-            std::cout << "big, unaligned, " << n_bits << "-bits, assign(" << val << ")\n";
-#       endif
-          detail::store_big_endian<T, n_bits/8>(m_value, val);
-          return *this;
-        }
-        value_type value() const BOOST_NOEXCEPT
-        {
-#       ifdef BOOST_ENDIAN_LOG
-          if ( endian_log )
-            std::cout << "big, unaligned, " << n_bits << "-bits, convert("
-              << detail::load_big_endian<T, n_bits/8>(m_value) << ")\n";
-#       endif
-          return detail::load_big_endian<T, n_bits/8>(m_value);
-        }
-        const char* data() const BOOST_NOEXCEPT  { return m_value; }
-      protected:
-        char m_value[n_bits/8];
+        boost::endian::endian_store<T, n_bits / 8, Order>( value_, val );
+    }
+
+#endif
+
+    endian_buffer& operator=( T val ) BOOST_NOEXCEPT
+    {
+        boost::endian::endian_store<T, n_bits / 8, Order>( value_, val );
+        return *this;
+    }
+
+    value_type value() const BOOST_NOEXCEPT
+    {
+        return boost::endian::endian_load<T, n_bits / 8, Order>( value_ );
+    }
+
+    char const * data() const BOOST_NOEXCEPT
+    {
+        return reinterpret_cast< char const* >( value_ );
+    }
+};
+
+// aligned specializations; only n_bits == 16/32/64 supported
+
+// aligned endian_buffer specialization
+
+template< BOOST_SCOPED_ENUM(order) Order, class T, std::size_t n_bits >
+class endian_buffer<Order, T, n_bits, align::yes>
+{
+private:
+
+    BOOST_STATIC_ASSERT( (n_bits/8)*8 == n_bits );
+    BOOST_STATIC_ASSERT( sizeof(T) == n_bits/8 );
+
+    union
+    {
+        unsigned char value_[ n_bits / 8 ];
+        T align_;
     };
 
-    //  unaligned little endian_buffer specialization
-    template <typename T, std::size_t n_bits>
-    class endian_buffer< order::little, T, n_bits, align::no >
+public:
+
+    typedef T value_type;
+
+#ifndef BOOST_ENDIAN_NO_CTORS
+
+    endian_buffer() BOOST_ENDIAN_DEFAULT_CONSTRUCT
+
+    explicit endian_buffer( T val ) BOOST_NOEXCEPT
     {
-        BOOST_STATIC_ASSERT( (n_bits/8)*8 == n_bits );
-      public:
-        typedef T value_type;
-#     ifndef BOOST_ENDIAN_NO_CTORS
-        endian_buffer() BOOST_ENDIAN_DEFAULT_CONSTRUCT
-        explicit endian_buffer(T val) BOOST_NOEXCEPT
-        {
-#       ifdef BOOST_ENDIAN_LOG
-          if ( endian_log )
-            std::cout << "little, unaligned, " << n_bits << "-bits, construct("
-              << val << ")\n";
-#       endif
-          detail::store_little_endian<T, n_bits/8>(m_value, val);
-        }
-#     endif
-        endian_buffer & operator=(T val) BOOST_NOEXCEPT
-          { detail::store_little_endian<T, n_bits/8>(m_value, val); return *this; }
-        value_type value() const BOOST_NOEXCEPT
-        {
-#       ifdef BOOST_ENDIAN_LOG
-          if ( endian_log )
-            std::cout << "little, unaligned, " << n_bits << "-bits, convert("
-              << detail::load_little_endian<T, n_bits/8>(m_value) << ")\n";
-#       endif
-          return detail::load_little_endian<T, n_bits/8>(m_value);
-        }
-        const char* data() const BOOST_NOEXCEPT  { return m_value; }
-      protected:
-        char m_value[n_bits/8];
-    };
+        boost::endian::endian_store<T, n_bits / 8, Order>( value_, val );
+    }
 
-  //  align::yes specializations; only n_bits == 16/32/64 supported
+#endif
 
-    //  aligned big endian_buffer specialization
-    template <typename T, std::size_t n_bits>
-    class endian_buffer<order::big, T, n_bits, align::yes>
+    endian_buffer& operator=( T val ) BOOST_NOEXCEPT
     {
-        BOOST_STATIC_ASSERT( (n_bits/8)*8 == n_bits );
-        BOOST_STATIC_ASSERT( sizeof(T) == n_bits/8 );
-      public:
-        typedef T value_type;
-#     ifndef BOOST_ENDIAN_NO_CTORS
-        endian_buffer() BOOST_ENDIAN_DEFAULT_CONSTRUCT
-        explicit endian_buffer(T val) BOOST_NOEXCEPT
-        {
-#       ifdef BOOST_ENDIAN_LOG
-          if ( endian_log )
-            std::cout << "big, aligned, " << n_bits
-              << "-bits, construct(" << val << ")\n";
-#       endif
-          m_value = ::boost::endian::native_to_big(val);
-        }
+        boost::endian::endian_store<T, n_bits / 8, Order>( value_, val );
+        return *this;
+    }
 
-#     endif
-        endian_buffer& operator=(T val) BOOST_NOEXCEPT
-        {
-          m_value = ::boost::endian::native_to_big(val);
-          return *this;
-        }
-        //operator value_type() const BOOST_NOEXCEPT
-        //{
-        //  return ::boost::endian::big_to_native(m_value);
-        //}
-        value_type value() const BOOST_NOEXCEPT
-        {
-#       ifdef BOOST_ENDIAN_LOG
-          if ( endian_log )
-            std::cout << "big, aligned, " << n_bits << "-bits, convert("
-              << ::boost::endian::big_to_native(m_value) << ")\n";
-#       endif
-          return ::boost::endian::big_to_native(m_value);
-        }
-        const char* data() const BOOST_NOEXCEPT
-          {return reinterpret_cast<const char*>(&m_value);}
-      protected:
-        T m_value;
-    };
-
-    //  aligned little endian_buffer specialization
-    template <typename T, std::size_t n_bits>
-    class endian_buffer<order::little, T, n_bits, align::yes>
+    value_type value() const BOOST_NOEXCEPT
     {
-        BOOST_STATIC_ASSERT( (n_bits/8)*8 == n_bits );
-        BOOST_STATIC_ASSERT( sizeof(T) == n_bits/8 );
-      public:
-        typedef T value_type;
-#     ifndef BOOST_ENDIAN_NO_CTORS
-        endian_buffer() BOOST_ENDIAN_DEFAULT_CONSTRUCT
-        explicit endian_buffer(T val) BOOST_NOEXCEPT
-        {
-#       ifdef BOOST_ENDIAN_LOG
-          if ( endian_log )
-            std::cout << "little, aligned, " << n_bits
-              << "-bits, construct(" << val << ")\n";
-#       endif
-          m_value = ::boost::endian::native_to_little(val);
-        }
+        return boost::endian::endian_load<T, n_bits / 8, Order>( value_ );
+    }
 
-#     endif
-        endian_buffer& operator=(T val) BOOST_NOEXCEPT
-        {
-          m_value = ::boost::endian::native_to_little(val);
-          return *this;
-        }
-        value_type value() const BOOST_NOEXCEPT
-        {
-#       ifdef BOOST_ENDIAN_LOG
-          if ( endian_log )
-            std::cout << "little, aligned, " << n_bits << "-bits, convert("
-              << ::boost::endian::little_to_native(m_value) << ")\n";
-#       endif
-          return ::boost::endian::little_to_native(m_value);
-        }
-        const char* data() const BOOST_NOEXCEPT
-          {return reinterpret_cast<const char*>(&m_value);}
-      protected:
-        T m_value;
-    };
+    char const * data() const BOOST_NOEXCEPT
+    {
+        return reinterpret_cast< char const* >( value_ );
+    }
+};
+
+// aligned native endian_buffer specialization
+
+template< class T, std::size_t n_bits >
+class endian_buffer<order::native, T, n_bits, align::yes>
+{
+private:
+
+    BOOST_STATIC_ASSERT( (n_bits/8)*8 == n_bits );
+    BOOST_STATIC_ASSERT( sizeof(T) == n_bits/8 );
+
+    T value_;
+
+public:
+
+    typedef T value_type;
+
+#ifndef BOOST_ENDIAN_NO_CTORS
+
+    endian_buffer() BOOST_ENDIAN_DEFAULT_CONSTRUCT
+
+    explicit endian_buffer( T val ) BOOST_NOEXCEPT: value_( val )
+    {
+    }
+
+#endif
+
+    endian_buffer& operator=( T val ) BOOST_NOEXCEPT
+    {
+        value_ = val;
+        return *this;
+    }
+
+    value_type value() const BOOST_NOEXCEPT
+    {
+        return value_;
+    }
+
+    char const * data() const BOOST_NOEXCEPT
+    {
+        return reinterpret_cast< char const* >( &value_ );
+    }
+};
 
 } // namespace endian
 } // namespace boost

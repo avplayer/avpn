@@ -32,7 +32,7 @@ namespace util {
         for(unsigned i=0;i<tmp.size();i++) {
             if('A' <= tmp[i] && tmp[i]<='Z')
                 tmp[i]=tmp[i]-'A'+'a';
-            else if(tmp[i] < 'a' && 'z' < tmp[i])
+            else if(tmp[i] < 'a' || 'z' < tmp[i])
                 return;
         }
         language = tmp;
@@ -59,7 +59,7 @@ namespace util {
         for(unsigned i=0;i<tmp.size();i++) {
             if('a' <= tmp[i] && tmp[i]<='z')
                 tmp[i]=tmp[i]-'a'+'A';
-            else if(tmp[i] < 'A' && 'Z' < tmp[i])
+            else if(tmp[i] < 'A' || 'Z' < tmp[i])
                 return;
         }
 

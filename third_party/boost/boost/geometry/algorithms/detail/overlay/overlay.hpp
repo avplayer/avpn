@@ -3,8 +3,8 @@
 // Copyright (c) 2007-2015 Barend Gehrels, Amsterdam, the Netherlands.
 // Copyright (c) 2013-2017 Adam Wulkiewicz, Lodz, Poland
 
-// This file was modified by Oracle on 2015, 2017.
-// Modifications copyright (c) 2015-2017, Oracle and/or its affiliates.
+// This file was modified by Oracle on 2015, 2017, 2019.
+// Modifications copyright (c) 2015-2019, Oracle and/or its affiliates.
 
 // Contributed and/or modified by Menelaos Karavelas, on behalf of Oracle
 // Contributed and/or modified by Adam Wulkiewicz, on behalf of Oracle
@@ -124,6 +124,12 @@ inline void get_ring_turn_info(TurnInfoMap& turn_info_map, Turns const& turns, C
 
         bool cluster_checked = false;
         bool has_blocked = false;
+
+        if (is_self_turn<OverlayType>(turn) && turn.discarded)
+        {
+            // Discarded self-turns don't count as traversed
+            continue;
+        }
 
         for (typename boost::range_iterator<container_type const>::type
                 op_it = boost::begin(turn.operations);
@@ -328,14 +334,12 @@ std::cout << "get turns" << std::endl;
 #ifdef BOOST_GEOMETRY_DEBUG_ASSEMBLE
 std::cout << "enrich" << std::endl;
 #endif
-        typename Strategy::side_strategy_type side_strategy = strategy.get_side_strategy();
+
         cluster_type clusters;
         std::map<ring_identifier, ring_turn_info> turn_info_per_ring;
 
-        geometry::enrich_intersection_points<Reverse1, Reverse2, OverlayType>(turns,
-                clusters, geometry1, geometry2,
-                    robust_policy,
-                    side_strategy);
+        geometry::enrich_intersection_points<Reverse1, Reverse2, OverlayType>(
+            turns, clusters, geometry1, geometry2, robust_policy, strategy);
 
         visitor.visit_turns(2, turns);
 

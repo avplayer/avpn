@@ -150,7 +150,7 @@ endif()
 set(BOOST_INCLUDE_DIRS ${CMAKE_CURRENT_SOURCE_DIR}/third_party/boost)
 
 add_definitions(-DBOOST_COROUTINES_NO_DEPRECATION_WARNING)
-add_subdirectory(third_party/boost)
+add_subdirectory(third_party/boost EXCLUDE_FROM_ALL)
 include_directories(${BOOST_INCLUDE_DIRS})
 
 add_subdirectory(third_party/zlib EXCLUDE_FROM_ALL)

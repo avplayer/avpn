@@ -16,21 +16,30 @@
 #include <system_error>
 #include <sys/types.h>
 #include <sys/wait.h>
+#include <unistd.h>
 
 namespace boost { namespace process { namespace detail { namespace posix {
 
 inline void wait(const group_handle &p, std::error_code &ec) noexcept
 {
     pid_t ret;
-    int status;
+    siginfo_t  status;
 
     do
     {
-        ret = ::waitpid(-p.grp, &status, 0);
-    } 
-    while (((ret == -1) && (errno == EINTR)) || (ret != -1 && !WIFEXITED(status) && !WIFSIGNALED(status)));
+        ret = ::waitpid(-p.grp, &status.si_status, 0);
+        if (ret == -1)
+        {
+            ec = get_last_error();
+            return; 
+        }
 
-    if (ret == -1)
+        //ECHILD --> no child processes left.
+        ret = ::waitid(P_PGID, p.grp, &status, WEXITED | WNOHANG);
+    } 
+    while ((ret != -1) || (errno != ECHILD));
+   
+    if (errno != ECHILD)
         ec = boost::process::detail::get_last_error();
     else
         ec.clear();
@@ -49,31 +58,105 @@ inline bool wait_until(
         const std::chrono::time_point<Clock, Duration>& time_out,
         std::error_code & ec) noexcept
 {
-    pid_t ret;
-    int status;
 
-    bool timed_out;
+    ::siginfo_t siginfo;
+
+    bool timed_out = false;
+    int ret;
+
+#if defined(BOOST_POSIX_HAS_SIGTIMEDWAIT)
+    auto get_timespec =
+            +[](const Duration & dur)
+            {
+                ::timespec ts;
+                ts.tv_sec  = std::chrono::duration_cast<std::chrono::seconds>(dur).count();
+                ts.tv_nsec = std::chrono::duration_cast<std::chrono::nanoseconds>(dur).count() % 1000000000;
+                return ts;
+            };
+
+    ::sigset_t  sigset;
+
+    if (sigemptyset(&sigset) != 0)
+    {
+        ec = get_last_error();
+        return false;
+    }
+    if (sigaddset(&sigset, SIGCHLD) != 0)
+    {
+        ec = get_last_error();
+        return false;
+    }
+
+    struct ::sigaction old_sig;
+    if (-1 == ::sigaction(SIGCHLD, nullptr, &old_sig))
+    {
+        ec = get_last_error();
+        return false;
+    }
 
     do
     {
-        ret = ::waitpid(-p.grp, &status, WNOHANG);
-        if (ret == 0)
+        auto ts = get_timespec(time_out - Clock::now());
+        ret = ::sigtimedwait(&sigset, nullptr, &ts);
+        errno = 0;
+        if ((ret == SIGCHLD) && (old_sig.sa_handler != SIG_DFL) && (old_sig.sa_handler != SIG_IGN))
+            old_sig.sa_handler(ret);
+
+        ret = ::waitpid(-p.grp, &siginfo.si_status, 0); //so in case it exited, we wanna reap it first
+        if (ret == -1)
         {
-            timed_out = Clock::now() >= time_out;
-            if (timed_out)
-                return false;
+			if ((errno == ECHILD) || (errno == ESRCH))
+			{
+				ec.clear();
+				return true;
+			}
+			else
+			{
+				ec = get_last_error();
+				return false; 
+			}
         }
+
+        //check if we're done ->
+        ret = ::waitid(P_PGID, p.grp, &siginfo, WEXITED | WNOHANG);
     }
-    while ((ret == 0) ||
-          (((ret == -1) && errno == EINTR) ||
-           ((ret != -1) && !WIFEXITED(status) && !WIFSIGNALED(status))));
+    while (((ret != -1) || ((errno != ECHILD) && (errno != ESRCH))) && !(timed_out = (Clock::now() > time_out)));
 
-    if (ret == -1)
+    if (errno != ECHILD)
+    {
         ec = boost::process::detail::get_last_error();
+        return !timed_out;
+    }
     else
+    {
         ec.clear();
+        return true; //even if timed out, there are no child proccessess left
+    }
 
-    return true;
+#else
+    ::timespec sleep_interval;
+    sleep_interval.tv_sec = 0;
+    sleep_interval.tv_nsec = 1000000;
+
+
+    while (!(timed_out = (Clock::now() > time_out)))
+    {
+        ret = ::waitid(P_PGID, p.grp, &siginfo, WEXITED | WSTOPPED | WNOHANG);
+        if (ret == -1)
+        {
+            if ((errno == ECHILD) || (errno == ESRCH))
+            {
+                ec.clear();
+                return true;
+            }
+            ec = boost::process::detail::get_last_error();
+            return false;
+        }
+        //we can wait, because unlike in the wait_for_exit, we have no race condition regarding eh exit code.
+        ::nanosleep(&sleep_interval, nullptr);
+    }
+    return !timed_out;
+#endif
 }
 
 template< class Clock, class Duration >
