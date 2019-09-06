@@ -1,4 +1,4 @@
-﻿#pragma once
+#pragma once
 
 #include <iostream>
 #include <string>
@@ -265,15 +265,30 @@ namespace tuntap_service {
 				return false;
 			}
 
-			auto addr = boost::asio::ip::address_v4::from_string(cfg.local_);
-			boost::asio::ip::udp::endpoint endp;
-			endp.address(addr);
-			memcpy(&ifr.ifr_addr, endp.data(), sizeof(struct sockaddr));
-			if (ioctl(sock, SIOCSIFADDR, (void *)&ifr) < 0)
 			{
-				::close(sock);
-				::close(fd);
-				return false;
+				auto addr = boost::asio::ip::address_v4::from_string(cfg.local_);
+				boost::asio::ip::udp::endpoint endp;
+				endp.address(addr);
+				memcpy(&ifr.ifr_addr, endp.data(), sizeof(struct sockaddr));
+				if (ioctl(sock, SIOCSIFADDR, (void *)&ifr) < 0)
+				{
+					::close(sock);
+					::close(fd);
+					return false;
+				}
+			}
+
+			{
+				auto addr = boost::asio::ip::address_v4::from_string(cfg.mask_);
+				boost::asio::ip::udp::endpoint endp;
+				endp.address(addr);
+				memcpy(&ifr.ifr_netmask, endp.data(), sizeof(struct sockaddr));
+				if (ioctl(sock, SIOCSIFNETMASK, (void *)&ifr) < 0)
+				{
+					::close(sock);
+					::close(fd);
+					return false;
+				}
 			}
 
 			::close(sock);

@@ -1,0 +1,9 @@
+[Unit]
+Description=Tun2Socks
+
+[Service]
+ExecStart=@CMAKE_INSTALL_PREFIX@/bin/tun2socks
+LimitNOFILE=900000
+Restart=always
+[Install]
+WantedBy=multi-user.target

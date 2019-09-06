@@ -201,5 +201,7 @@ if (WIN32)
 	set(CMAKE_RUNTIME_OUTPUT_DIRECTORY_RELEASE ${CMAKE_BINARY_DIR}/bin/release)
 endif()
 
+configure_file(tun2socks.service.in tun2socks.service)
+
 add_subdirectory(avpn)
 
