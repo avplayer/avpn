@@ -473,7 +473,7 @@ namespace socks {
 			if (content.scheme == "socks5")
 			{
 				auto self = shared_from_this();
-				boost::asio::spawn(m_socket.get_io_context(), [this, self, handler]
+				boost::asio::spawn(m_socket.get_executor(), [this, self, handler]
 				(boost::asio::yield_context yield)
 				{
 					do_socks5<Handler>(handler, yield);
@@ -482,7 +482,7 @@ namespace socks {
 			else if (content.scheme == "socks4")
 			{
 				auto self = shared_from_this();
-				boost::asio::spawn(m_socket.get_io_context(), [this, self, handler]
+				boost::asio::spawn(m_socket.get_executor(), [this, self, handler]
 				(boost::asio::yield_context yield)
 				{
 					do_socks4<Handler>(handler, yield);

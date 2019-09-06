@@ -168,7 +168,7 @@ R"(<html>
 		{
 			// Send a TCP shutdown
 			boost::system::error_code ec;
-			m_websocket.lowest_layer().shutdown(tcp::socket::shutdown_send, ec);
+			m_websocket.next_layer().shutdown(tcp::socket::shutdown_send, ec);
 		}
 
 	private:

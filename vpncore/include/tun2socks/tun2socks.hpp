@@ -35,7 +35,7 @@ namespace avpncore {
 
 		// resolver socks uri.
 		tcp::resolver::query query(socks_addr.host, socks_addr.port);
-		tcp::resolver resolver(sock.get_io_context());
+		tcp::resolver resolver(sock.get_executor());
 		boost::system::error_code ec;
 
 		auto endp = resolver.async_resolve(query, yield[ec]);
@@ -132,7 +132,7 @@ namespace avpncore {
 				using namespace socks;
 				socks_address socks_addr;
 				boost::shared_ptr<boost::asio::ip::tcp::socket> socks_ptr
-					= boost::make_shared<boost::asio::ip::tcp::socket>(boost::ref(m_io_context));
+					= boost::make_shared<boost::asio::ip::tcp::socket>(m_io_context);
 				using namespace socks;
 				boost::asio::ip::tcp::socket& socks = *socks_ptr;
 
@@ -162,7 +162,7 @@ namespace avpncore {
 				socks_addr.udp_associate = false;
 
 				// 执行代理异步连接操作.
-				auto sc = boost::make_local_shared<socks::socks_client>(boost::ref(socks));
+				auto sc = boost::make_local_shared<socks::socks_client>(socks);
 				sc->async_do_proxy(socks_addr, [this, socks_ptr, local, ts, self, endp]
 				(const boost::system::error_code& err)
 				{
