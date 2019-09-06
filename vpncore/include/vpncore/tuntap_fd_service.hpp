@@ -231,6 +231,8 @@ namespace tuntap_service {
 
 			LOG_DBG << "TUN / TAP device " << ifr.ifr_name << " opened";
 
+			if_index = if_nametoindex(ifr.ifr_name);
+
 			// open dummy socket for ioctls
 			int sock = socket(AF_INET, SOCK_DGRAM, 0);
 			if (sock < 0)
@@ -405,6 +407,11 @@ namespace tuntap_service {
 			return m_frame_mtu;
 		}
 
+		int get_if_index() const
+		{
+			return if_index;
+		}
+
 	private:
 		void fetch_tuntap()
 		{
@@ -500,6 +507,7 @@ namespace tuntap_service {
 		int m_frame_mtu;
 		std::vector<uint8_t> m_mac_addr;
 		int m_tuntap_fd;
+		int if_index;
 	};
 
 }

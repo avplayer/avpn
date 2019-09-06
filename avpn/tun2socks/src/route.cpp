@@ -1,115 +1,115 @@
 
-
-#include <stdio.h>
-#include <sys/errno.h>
-#include <sys/time.h>
-#include <sys/socket.h>
-#include <asm/types.h>
-#include <sys/types.h>
+#include <unistd.h>
 
 extern "C" {
 #include <libnetlink.h>
-#include <linux/rtnetlink.h>
-#include <linux/netlink.h>
 }
 
-#include <unistd.h>
-#include <string.h>
-#include <sys/uio.h>
-
-#include "route.hpp"
+typedef struct _request
+{
+    struct nlmsghdr netlink_header;
+    struct rtmsg rt_message;
+    char buffer[1024];
+} req_t;
 
 static int addattr_l(struct nlmsghdr *n, int maxlen, int type, void *data, int alen)
 {
-	int len = RTA_LENGTH(alen);
-	struct rtattr *rta;
-	if (NLMSG_ALIGN(n->nlmsg_len) + len > maxlen)
-	return -1;
-	rta = (struct rtattr*)(((char*)n) + NLMSG_ALIGN(n->nlmsg_len));
-	rta->rta_type = type;
-	rta->rta_len = len;
-	memcpy(RTA_DATA(rta), data, alen);
-	n->nlmsg_len = NLMSG_ALIGN(n->nlmsg_len) + len;
-	fprintf(stderr,"\nattr len=%d\n",n->nlmsg_len);
-	return 0;
+    /* alen is the length of the data. Add sizeof(struct rtattr) to it to accomodate
+    type, length, value format for rtattr */
+    int len = RTA_LENGTH(alen); // (RTA_ALIGN(sizeof(struct rtattr)) + (len))
+    struct rtattr *rta;
+    /* size of request should not be violated*/
+    if (NLMSG_ALIGN(n->nlmsg_len) + len > maxlen)
+            return -1;
+
+    /* go to end of buffer in request data structure*/
+    rta = (struct rtattr*)(((char*)n) + NLMSG_ALIGN(n->nlmsg_len));
+    /* specify attribute using TLV format*/
+    rta->rta_type = type;
+    rta->rta_len = len;
+    memcpy(RTA_DATA(rta), data, alen);
+    /* increase the nlmsg_len to accomodate the added new attribute*/
+    n->nlmsg_len = NLMSG_ALIGN(n->nlmsg_len) + len;
+    return 0;
 }
 
-int nl_add_route(std::uint32_t destination, std::uint32_t gateway)
+
+static void initialisation(req_t& request, uint32_t gateway, int index)
 {
-	struct rtnl_handle rth;
-	if (rtnl_open(&rth, 0) != 0)
-		return -1;
+    memset(&request, 0, sizeof(request));
+    /* set the nlmsg_len = nl header + underlying structure*/
+    request.netlink_header.nlmsg_len = NLMSG_LENGTH(sizeof(struct rtmsg)); /*NLMSG_HDRLEN + sizeof(struct rtmsg);*/
+    /* set the flags that facilitates adding a route in routing table*/
+    request.netlink_header.nlmsg_flags = NLM_F_REQUEST|NLM_F_CREATE;
+    /* note that inet_rtm_newroute() is the fn in kernel which will be eventually called to add a new route in routing table*/
+    request.netlink_header.nlmsg_type = RTM_NEWROUTE;
+    /* Now filling the rtmsg*/
+    request.rt_message.rtm_family = AF_INET;
+    request.rt_message.rtm_table = RT_TABLE_MAIN;
+    request.rt_message.rtm_protocol = RTPROT_STATIC;/*Route installed during boot*/
+    request.rt_message.rtm_scope = RT_SCOPE_UNIVERSE;
+    request.rt_message.rtm_type = RTN_UNICAST; /*Gateway or direct route  */
+
+    /* Add routing info*/
+    addattr_l(&request.netlink_header, sizeof(request), RTA_GATEWAY, &gateway,    sizeof(gateway));
+
+	/* mask */
+//	request.rt_message.rtm_dst_len = 24;
+
+	int32_t dst = 0;
+
+	addattr_l(&request.netlink_header, sizeof(request), RTA_DST,     &dst,   sizeof(dst));
+	addattr32(&request.netlink_header, sizeof(request), RTA_OIF,     index);
+    /* For adding a route, the gateway, destination address and the interface
+    will suffice, now the netlink packet is all set to go to the kernel*/
+}
+
+static void send_request(int fd, req_t& request)
+{
+    int rc = 0;
+
 
 	struct sockaddr_nl nladdr;
-	int status;
 
-	__u32 index=1; /* Output Interface ::: eth0 */
-	__u32 source=0;
+	memset(&nladdr, 0, sizeof(nladdr));
+    nladdr.nl_family = AF_NETLINK;
+    nladdr.nl_pid = 0; /* For Linux Kernel  */
+    nladdr.nl_groups = 0;
 
-	// structure of the netlink packet.
-	struct
-	{
-	struct nlmsghdr n;
-	struct rtmsg r;
-	char buf[1024];
-	} req;
+	struct iovec iov = { (void*)&request.netlink_header, request.netlink_header.nlmsg_len };
 
-	// Forming the iovector with the netlink packet.
-	struct iovec iov = { (void*)&req.n, req.n.nlmsg_len };
+    struct msghdr msg = {
+        (void*)&nladdr, sizeof(nladdr),
+        &iov,   1,
+        NULL,   0,
+        0
+    };
+    rc = sendmsg(fd, &msg, 0);
+    printf("bytes send = %d\n", rc);
+}
 
-	// Forming the message to be sent.
-	struct msghdr msg = { (void*)&nladdr, sizeof(nladdr), &iov, 1, NULL, 0, 0 };
+int nl_add_route(int ifindex, uint32_t gateway)
+{
+	struct sockaddr_nl la;
+	int fd = socket(AF_NETLINK, SOCK_RAW, NETLINK_ROUTE);
+	if(fd < 0){
+		printf("socket creation failed\n");
+		_exit(1);
+	}
+	bzero(&la, sizeof(la));
+	la.nl_family = AF_NETLINK;
+	la.nl_pid = 0;
+	la.nl_groups = 0;
 
+	if(bind(fd, (struct sockaddr*) &la, sizeof(la)) < 0){
+			printf("Bind failed\n");
+			return -1;
+	}
 
-	char mxbuf[256];
-	struct rtattr * mxrta = (rtattr *)mxbuf;
-	unsigned mxlock = 0;
-	memset(&req, 0, sizeof(req));
+	req_t request;
 
-	// Initialisation of a few parameters
-	memset(&nladdr,0,sizeof(nladdr));
-	nladdr.nl_family= AF_NETLINK;
-	nladdr.nl_pid=0;
-	nladdr.nl_groups=0;
-
-	req.n.nlmsg_len = NLMSG_LENGTH(sizeof(struct rtmsg));
-	req.n.nlmsg_flags = NLM_F_REQUEST|NLM_F_CREATE;
-	req.n.nlmsg_type = RTM_NEWROUTE;
-
-	req.r.rtm_family = AF_INET;
-	req.r.rtm_table = RT_TABLE_MAIN;
-	req.r.rtm_protocol = RTPROT_BOOT;
-	req.r.rtm_scope = RT_SCOPE_UNIVERSE;
-	req.r.rtm_type = RTN_UNICAST;
-	req.r.rtm_dst_len=24;
-	req.r.rtm_src_len=0;
-	req.r.rtm_tos=0;
-	req.r.rtm_flags=RT_TABLE_MAIN;
-
-
-	mxrta->rta_type = RTA_METRICS;
-	mxrta->rta_len = RTA_LENGTH(0);
-
-	mxrta = (struct rtattr*)(((char*)&req.n) + NLMSG_ALIGN(req.n.nlmsg_len));
-	memcpy(RTA_DATA(mxrta),mxbuf,0);
-	req.n.nlmsg_len = NLMSG_ALIGN(req.n.nlmsg_len) + mxrta->rta_len;
-
-	// RTA_DST and RTA_GW are the two esential parameters for adding a route,
-	// there are other parameters too which are not discussed here. For ipv4,
-	// the length of the address is 4 bytes.
-
-	addattr_l(&req.n, sizeof(req), RTA_OIF,&index, 4);
-	addattr_l(&req.n, sizeof(req), RTA_SRC,&source, 4);
-	addattr_l(&req.n, sizeof(req), RTA_DST, &destination, 4);
-	addattr_l(&req.n, sizeof(req), RTA_GATEWAY, &gateway, 4);
-
-
-	// sending the packet to the kernel.
-	status = rtnl_send(&rth, &msg, 0);
-
-	fprintf(stderr,"\nstatus=%d",status);
-
-	rtnl_close(&rth);
-
+	initialisation(request, gateway, ifindex);
+	send_request(fd, request);
+	close(fd);
 	return 0;
 }

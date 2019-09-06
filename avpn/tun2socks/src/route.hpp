@@ -3,4 +3,4 @@
 
 #include <cstdint>
 
-int nl_add_route(std::uint32_t dest, std::uint32_t gateway);
+int nl_add_route(int ifindex, std::uint32_t gateway);

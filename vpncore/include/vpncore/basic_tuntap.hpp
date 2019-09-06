@@ -91,6 +91,11 @@ namespace tuntap_service {
 			return service_.take_mtu(impl_);
 		}
 
+		int get_if_index() const
+		{
+			return service_.get_if_index();
+		}
+
 	private:
 		service_type & service_;
 		impl_type impl_;
