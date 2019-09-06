@@ -336,6 +336,8 @@ add_library(boost_context SHARED ${BOOST_CONTEXT_SRC})
 add_library(Boost::context ALIAS boost_context)
 endif()
 
+add_library(boost_coroutine_static STATIC ${BOOST_COROUTINE_SRC})
+add_library(Boost::coroutine ALIAS boost_coroutine_static)
 
 if(Boost_USE_STATIC_LIBS)
 add_library(boost_fiber STATIC ${BOOST_FIBER_SRC})

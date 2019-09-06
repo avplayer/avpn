@@ -189,7 +189,8 @@ elseif(UNIX AND NOT APPLE)
 endif()
 
 link_libraries(
-	Boost::system Boost::thread Boost::chrono Boost::program_options Boost::locale Boost::random Boost::coroutine
+	Boost::system Boost::thread Boost::chrono Boost::program_options
+	Boost::locale Boost::random Boost::coroutine
 )
 
 set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib)
