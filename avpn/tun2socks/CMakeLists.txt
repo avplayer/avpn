@@ -10,3 +10,7 @@ file(GLOB tun2socks_SRCS
 add_executable(tun2socks
 	${tun2socks_SRCS}
 )
+
+if(UNIX AND NOT APPLE)
+	target_link_libraries(tun2socks netlink)
+endif()

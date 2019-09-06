@@ -19,6 +19,7 @@
 using namespace tuntap_service;
 using namespace avpncore;
 
+#include "route.hpp"
 
 int platform_init()
 {
@@ -113,6 +114,8 @@ int main(int argc, char** argv)
 
 	// 启动tun2socks.
 	ts.start("10.0.0.2", cfg.mask_, argv[2]);
+
+	nl_add_route(0, inet_addr("10.0.0.2"));
 
 	// running...
 	io.run();
