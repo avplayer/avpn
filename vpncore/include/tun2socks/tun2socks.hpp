@@ -133,6 +133,7 @@ namespace avpncore {
 				socks_address socks_addr;
 				boost::shared_ptr<boost::asio::ip::tcp::socket> socks_ptr
 					= boost::make_shared<boost::asio::ip::tcp::socket>(boost::ref(m_io_context));
+				using namespace socks;
 				boost::asio::ip::tcp::socket& socks = *socks_ptr;
 
 				// 连接到socks服务器.

@@ -397,7 +397,7 @@ namespace tuntap_service {
 			struct rtnl_handle rth;
 			if (rtnl_open(&rth, 0) != 0)
 				return;
-			if (rtnl_wilddump_request(&rth, AF_UNSPEC, RTM_GETLINK) < 0)
+			if (rtnl_wilddump_request_old(&rth, AF_UNSPEC, RTM_GETLINK) < 0)
 				return;
 			if (rtnl_dump_filter_nc(&rth, list_tuntap_func, (void*)this, 0) < 0)
 				return;
@@ -407,7 +407,7 @@ namespace tuntap_service {
 
 #ifdef AVPN_LINUX
 		// friend
-		static int list_tuntap_func(const struct sockaddr_nl *, struct nlmsghdr *n, void *arg)
+		static int list_tuntap_func(struct nlmsghdr *n, void *arg)
 		{
 			auto pthis = (tuntap_fd_service*)arg;
 			return pthis->list_tuntap(n);
