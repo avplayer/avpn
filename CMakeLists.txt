@@ -202,6 +202,7 @@ if (WIN32)
 endif()
 
 configure_file(tun2socks.service.in tun2socks.service)
+install(FILES ${CMAKE_CURRENT_BINARY_DIR}/tun2socks.service DESTINATION /usr/lib/systemd/system/)
 
 add_subdirectory(avpn)
 
