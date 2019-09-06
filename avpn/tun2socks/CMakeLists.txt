@@ -14,3 +14,5 @@ add_executable(tun2socks
 if(UNIX AND NOT APPLE)
 	target_link_libraries(tun2socks netlink)
 endif()
+
+install(TARGETS tun2socks DESTINATION bin)
