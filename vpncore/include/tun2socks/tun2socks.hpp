@@ -85,8 +85,7 @@ namespace avpncore {
 		bool start(const std::string& local, const std::string& mask,
 			const std::string& socks_server)
 		{
-			m_demultiplexer = boost::make_shared<demultiplexer>(
-				std::ref(m_io_context), std::ref(m_dev));
+			m_demultiplexer = boost::make_shared<demultiplexer>(m_io_context, m_dev);
 
 			m_demultiplexer->accept_udp(std::bind(&tun2socks::handle_udp,
 				this, std::placeholders::_1));
@@ -321,7 +320,7 @@ namespace avpncore {
 				socks_addr.proxy_port = std::to_string(m_udp_socks.remote_endpoint().port());
 				socks_addr.udp_associate = true;
 
-				auto udpsocks = boost::make_local_shared<socks::socks_client>(std::ref(m_udp_socks));
+				auto udpsocks = boost::make_local_shared<socks::socks_client>(m_udp_socks);
 				udpsocks->async_do_proxy(socks_addr,
 				[this, udpsocks](const boost::system::error_code& err)
 				{

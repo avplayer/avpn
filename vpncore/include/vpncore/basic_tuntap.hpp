@@ -3,8 +3,7 @@
 #include <vector>
 #include <memory>
 
-#include <boost/asio/io_context.hpp>
-#include <boost/asio/async_result.hpp>
+#include <boost/asio.hpp>
 
 #include "vpncore/tuntap_config.hpp"
 
@@ -58,7 +57,9 @@ namespace tuntap_service {
 			async_read_some(const MutableBufferSequence& buffers,
 				BOOST_ASIO_MOVE_ARG(ReadHandler) handler)
 		{
-			return service_.async_read_some(impl_, buffers, handler);
+			boost::asio::async_completion<ReadHandler, void(boost::system::error_code, std::size_t)> init(handler);
+			service_.async_read_some(impl_, buffers, std::move(init.completion_handler));
+			return init.result.get();
 		}
 
 		// 提供异步写入tuntap设备上的数据到buffer.
@@ -69,7 +70,9 @@ namespace tuntap_service {
 			async_write_some(const ConstBufferSequence& buffers,
 				BOOST_ASIO_MOVE_ARG(WriteHandler) handler)
 		{
-			return service_.async_write_some(impl_, buffers, handler);
+                        boost::asio::async_completion<WriteHandler, void(boost::system::error_code, std::size_t)> init(handler);
+			service_.async_write_some(impl_, buffers, std::move(init.completion_handler));
+                        return init.result.get();
 		}
 
 		// 获取所有tuntap设备列表, 一般在打开tuntap devicep之前
