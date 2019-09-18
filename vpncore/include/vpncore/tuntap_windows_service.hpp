@@ -330,8 +330,7 @@ namespace tuntap_service {
 		{
 			BOOST_ASSERT("impl == this" && impl == this);
 
-			int index;
-			index = details::get_interface_index(cfg.guid_.c_str());
+			if_index = details::get_interface_index(cfg.guid_.c_str());
 
 			TCHAR device_path[256] = { 0 };
 			_stprintf(device_path, TEXT("%s%s%s"),
@@ -542,7 +541,10 @@ namespace tuntap_service {
 			return m_frame_mtu;
 		}
 
-
+		int get_if_index() const
+		{
+			return if_index;
+		}
 	private:
 		std::vector<device_tuntap> m_device_list;
 		dev_config m_config;
@@ -550,5 +552,6 @@ namespace tuntap_service {
 		int m_frame_mtu;
 		std::vector<uint8_t> m_mac_addr;
 		boost::asio::windows::random_access_handle m_io_handle;
+		int if_index;
 	};
 }

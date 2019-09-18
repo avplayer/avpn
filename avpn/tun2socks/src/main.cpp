@@ -116,7 +116,6 @@ int main(int argc, char** argv)
 	// 启动tun2socks.
 	ts.start("10.0.0.2", cfg.mask_, argv[2]);
 
-#ifdef AVPN_LINUX
 	boost::asio::steady_timer st(io);
 	st.expires_after(std::chrono::seconds(0));
 	st.async_wait([&tap](auto ec)
@@ -125,7 +124,7 @@ int main(int argc, char** argv)
 		printf("tun device index %d\n", index);
 		nl_add_route(tap.get_if_index(), inet_addr("10.0.0.2"));
 	});
-#endif
+
 	// running...
 	io.run();
 

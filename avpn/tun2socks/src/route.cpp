@@ -114,4 +114,25 @@ int nl_add_route(int ifindex, uint32_t gateway)
 	close(fd);
 	return 0;
 }
+
+
+#elif defined(_WIN32)
+
+#include <windows.h>
+#include <iphlpapi.h>
+#include <cstdint>
+
+int nl_add_route(int ifindex, uint32_t gateway)
+{
+	MIB_IPFORWARDROW routerow = { 0 };
+	
+	routerow.dwForwardIfIndex = ifindex;
+	routerow.dwForwardNextHop = gateway;
+	routerow.ForwardProto = MIB_IPPROTO_DHCP;
+	routerow.dwForwardType = MIB_IPROUTE_TYPE_INDIRECT;
+
+	CreateIpForwardEntry(&routerow);
+	return 0;
+}
+
 #endif
