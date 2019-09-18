@@ -10,3 +10,6 @@ file(GLOB vpncore_SRCS
 add_executable(avpn
 	${vpncore_SRCS}
 )
+if(WIN32)
+	target_link_libraries(avpn Cfgmgr32.lib)
+endif()

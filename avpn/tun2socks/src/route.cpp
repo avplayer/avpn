@@ -118,20 +118,81 @@ int nl_add_route(int ifindex, uint32_t gateway)
 
 #elif defined(_WIN32)
 
+#include <vector>
 #include <windows.h>
 #include <iphlpapi.h>
 #include <cstdint>
+#include <stdlib.h>
+#include <stdio.h>
 
-int nl_add_route(int ifindex, uint32_t gateway)
+int nl_add_route(int ifindex, uint32_t NewGateway)
 {
-	MIB_IPFORWARDROW routerow = { 0 };
-	
-	routerow.dwForwardIfIndex = ifindex;
-	routerow.dwForwardNextHop = gateway;
-	routerow.ForwardProto = MIB_IPPROTO_DHCP;
-	routerow.dwForwardType = MIB_IPROUTE_TYPE_INDIRECT;
+	// Declare and initialize variables
 
-	CreateIpForwardEntry(&routerow);
+	PMIB_IPFORWARDTABLE pIpForwardTable = 0;
+	std::vector<char> IpForwardTable_Store;
+	MIB_IPFORWARDROW pRow = { 0 };
+	DWORD dwSize = 0;
+	BOOL bOrder = FALSE;
+	DWORD dwStatus = 0;
+
+	unsigned int i;
+
+	// Find out how big our buffer needs to be.
+	dwStatus = GetIpForwardTable(pIpForwardTable, &dwSize, bOrder);
+	if (dwStatus == ERROR_INSUFFICIENT_BUFFER) {
+		// Allocate the memory for the table
+		IpForwardTable_Store.resize(dwSize);
+		pIpForwardTable = (PMIB_IPFORWARDTABLE)&IpForwardTable_Store[0];
+		// Now get the table.
+		dwStatus = GetIpForwardTable(pIpForwardTable, &dwSize, bOrder);
+	}
+
+	if (dwStatus != ERROR_SUCCESS) {
+		printf("getIpForwardTable failed.\n");
+		if (pIpForwardTable)
+			free(pIpForwardTable);
+		exit(1);
+	}
+	// Search for the row in the table we want. The default gateway has a destination
+	// of 0.0.0.0. Notice that we continue looking through the table, but copy only 
+	// one row. This is so that if there happen to be multiple default gateways, we can
+	// be sure to delete them all.
+	for (i = 0; i < pIpForwardTable->dwNumEntries; i++) {
+		if (pIpForwardTable->table[i].dwForwardDest == 0) {
+
+			if (pIpForwardTable->table[i].dwForwardNextHop == NewGateway) {
+				DeleteIpForwardEntry(&pRow);
+				continue;
+			}
+			// We have found the default gateway.
+			// Copy the row
+			memcpy(&pRow, &(pIpForwardTable->table[i]), sizeof(MIB_IPFORWARDROW));
+			pRow.dwForwardMetric1 = 331;
+			dwStatus = SetIpForwardEntry(&pRow);/
+			break;
+		}
+	}
+
+	// Set the nexthop field to our new gateway - all the other properties of the route will
+	// be the same as they were previously.
+	pRow.dwForwardNextHop = NewGateway;
+	pRow.dwForwardIfIndex = ifindex;
+	pRow.dwForwardMetric1 = 25;
+
+	// Create a new route entry for the default gateway.
+	dwStatus = CreateIpForwardEntry(&pRow);
+
+	if (dwStatus == NO_ERROR)
+		printf("Gateway changed successfully\n");
+	else if (dwStatus == ERROR_INVALID_PARAMETER)
+		printf("Invalid parameter.\n");
+	else
+		printf("Error: %d\n", dwStatus);
+
+	pRow.dwForwardMetric1 = 25;
+	dwStatus = SetIpForwardEntry(&pRow);
+
 	return 0;
 }
 

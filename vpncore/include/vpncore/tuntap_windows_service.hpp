@@ -325,7 +325,6 @@ namespace tuntap_service {
 			impl = null();
 		}
 
-
 		bool open(impl_type& impl, const dev_config& cfg)
 		{
 			BOOST_ASSERT("impl == this" && impl == this);
@@ -341,8 +340,9 @@ namespace tuntap_service {
 				FILE_ATTRIBUTE_SYSTEM | FILE_FLAG_OVERLAPPED, 0);
 
 			if (handle == INVALID_HANDLE_VALUE)
-				return false;
-
+			{
+				return FALSE;
+			}
 			// TAP-Win32 Driver Version.
 			struct {
 				unsigned long major;
@@ -430,18 +430,17 @@ namespace tuntap_service {
 				mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
 
 
-#if 0
 			uint32_t ep[4];
 
 			ep[0] = inet_addr(cfg.local_.c_str());	// local ip
 			ep[1] = inet_addr(cfg.mask_.c_str());	// mask
-			ep[2] = inet_addr(cfg.dhcp_.c_str());
+			ep[2] = htonl(htonl(ep[0] | ~ep[1]) - 1);
 
 			inet_pton(AF_INET, cfg.local_.c_str(), &ep[0]);	// local ip
 			inet_pton(AF_INET, cfg.mask_.c_str(), &ep[1]);	// mask
 			inet_pton(AF_INET, cfg.dhcp_.c_str(), &ep[2]);
 
-			ep[3] = 0x00FFFFFF;
+			ep[3] = 0xFFFFFFFE;
 
 			if (!DeviceIoControl(handle, TAP_IOCTL_CONFIG_DHCP_MASQ,
 				ep, sizeof(ep), ep, sizeof(ep), &len, NULL))
@@ -449,7 +448,7 @@ namespace tuntap_service {
 				CloseHandle(handle);
 				return false;
 			}
-#endif
+
 
 			if (!details::tap_win32_set_status(handle, TRUE))
 			{
