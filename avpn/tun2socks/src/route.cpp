@@ -1,4 +1,5 @@
 
+#ifdef __linux__
 #include <unistd.h>
 
 extern "C" {
@@ -113,3 +114,4 @@ int nl_add_route(int ifindex, uint32_t gateway)
 	close(fd);
 	return 0;
 }
+#endif
