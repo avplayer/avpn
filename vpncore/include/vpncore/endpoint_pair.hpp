@@ -41,6 +41,17 @@ namespace avpncore {
 			dst_.port(ntohs(dst_port));
 		}
 
+		// ipv4地址传入构造endpoint pair.
+		endpoint_pair(boost::asio::ip::address_v6 src_ip, uint16_t src_port,
+			boost::asio::ip::address_v6 dst_ip, uint16_t dst_port)
+			: type_(-1)
+		{
+			src_.address(src_ip);
+			src_.port(ntohs(src_port));
+			dst_.address(dst_ip);
+			dst_.port(ntohs(dst_port));
+		}
+
 		bool empty() const
 		{
 			return type_ < 0;
