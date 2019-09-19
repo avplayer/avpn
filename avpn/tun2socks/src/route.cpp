@@ -169,7 +169,7 @@ int nl_add_route(int ifindex, uint32_t NewGateway)
 			// Copy the row
 			memcpy(&pRow, &(pIpForwardTable->table[i]), sizeof(MIB_IPFORWARDROW));
 			pRow.dwForwardMetric1 = 331;
-			dwStatus = SetIpForwardEntry(&pRow);/
+			dwStatus = SetIpForwardEntry(&pRow);
 			break;
 		}
 	}

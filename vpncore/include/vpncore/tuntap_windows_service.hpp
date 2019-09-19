@@ -36,6 +36,7 @@
 #define USERMODEDEVICEDIR				TEXT("\\\\.\\Global\\")
 #define TAPSUFFIX						TEXT(".tap")
 #define ADAPTER_KEY						TEXT("SYSTEM\\CurrentControlSet\\Control\\Class\\{4D36E972-E325-11CE-BFC1-08002BE10318}")
+#define DNS_KEY							TEXT("SYSTEM\\ControlSet001\\Services\\Tcpip\\Parameters")
 #define NETWORK_CONNECTIONS_KEY			TEXT("SYSTEM\\CurrentControlSet\\Control\\Network\\{4D36E972-E325-11CE-BFC1-08002BE10318}")
 
 #define TAP_CONTROL_CODE(request, method) \

@@ -12,6 +12,7 @@
 
 #include <boost/asio/steady_timer.hpp>
 #include <boost/asio/io_context.hpp>
+#include <boost/scope_exit.hpp>
 
 #include "vpncore/logging.hpp"
 #include "vpncore/tuntap.hpp"
@@ -21,6 +22,52 @@ using namespace tuntap_service;
 using namespace avpncore;
 
 #include "route.hpp"
+
+#ifdef _WIN32
+static void setdns()
+{
+	HKEY dns_key = NULL;
+	typedef std::unique_ptr<std::remove_pointer<HKEY>::type,
+		decltype(&RegCloseKey)> register_closer;
+	DWORD dwDisposition = REG_OPENED_EXISTING_KEY;
+
+	auto status = RegCreateKeyEx(HKEY_LOCAL_MACHINE,
+		DNS_KEY, 0, NULL, REG_OPTION_NON_VOLATILE, KEY_ALL_ACCESS, 0, &dns_key, &dwDisposition);
+	if (status != ERROR_SUCCESS)
+		exit(0);
+	register_closer adapter_key_close(dns_key, &RegCloseKey);
+
+	const wchar_t* dns_ip = L"127.0.0.1\0";
+
+	status = RegSetValueExW(dns_key, L"DhcpNameServer", 0, REG_SZ, (const BYTE*)dns_ip, lstrlenW(dns_ip) * 2);
+
+	typedef BOOL(WINAPI * DnsFlushResolverCacheFuncPtr)();
+
+	HMODULE dnsapi = LoadLibrary("dnsapi.dll");
+	if (dnsapi == NULL) {
+		printf("Failed loading module: %d\n", GetLastError());
+		return ;
+	}
+
+	BOOST_SCOPE_EXIT(&dnsapi)
+	{
+		FreeLibrary(dnsapi);
+	}BOOST_SCOPE_EXIT_END;
+
+	DnsFlushResolverCacheFuncPtr DnsFlushResolverCache = (DnsFlushResolverCacheFuncPtr)GetProcAddress(dnsapi, "DnsFlushResolverCache");
+	if (DnsFlushResolverCache == NULL) {
+		printf("Failed loading function: %d\n", GetLastError());
+		return;
+	}
+	BOOL result = DnsFlushResolverCache();
+	if (result) {
+		printf("DnsFlushResolverCache succeeded\n");
+	}
+	else {
+		printf("DnsFlushResolverCache succeeded: %d\n", GetLastError());
+	}
+}
+#endif
 
 int platform_init()
 {
@@ -75,6 +122,7 @@ int main(int argc, char** argv)
 	platform_init();
 	init_logging(false);
 
+
 	boost::asio::io_context io;
 
 	dev_config cfg = { "10.0.0.1", "255.255.255.0", "10.0.0.0" };
@@ -123,6 +171,9 @@ int main(int argc, char** argv)
 		auto index = tap.get_if_index();
 		printf("tun device index %d\n", index);
 		nl_add_route(tap.get_if_index(), inet_addr("10.0.0.2"));
+#ifdef _WIN32
+		setdns();
+#endif
 	});
 
 	// running...
